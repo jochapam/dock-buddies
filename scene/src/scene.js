@@ -1132,7 +1132,7 @@ function pose(t) {
   bearBody.scale.set((1 + (breath - 1) * 0.5) / Math.sqrt(tall) / Math.sqrt(bSquash), breath * tall * bSquash, 1);
   bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown) ;   // nods asleep, leans back to stretch, bends to reach the floor
   bearBody.rotation.z = -0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
-  if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * Math.max(W.toastTurn, W.holdOut);    // turns towards Nom for a toast or a refill
+  if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn;    // turns towards Nom for a toast
   pivotAbout(bearBody, BEAR_BEND_AT);
   bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
   bearPoses.show(bs);
@@ -1147,7 +1147,7 @@ function pose(t) {
   bearMug.rotation.set((MUG_TILT + BEAR_ARM_LIFT * bs - (0.5 + MUG_TILT) * smooth((bs - 0.6) / 0.4)), 0, 0);
   // for a refill, Barry sets his mug down by Nom (and it stays there until he picks it up again)
   if (W.pot > 0 || W.pourBarry > 0) D.bSide = 1; else if (bearDown < 0.02) D.bSide = 0;
-  bearFloor.position.set(...lerp3([0, 0.24, 1.55], [-0.98, 0.24, 1.42], D.bSide || 0));
+  bearFloor.position.set(...lerp3([0, 0.24, 1.55], [-0.48, 0.24, 1.68], D.bSide || 0));
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
   // reading aloud: little mouth movements in bursts, like words
   const talk = W.reading && W.pageT > 0.9 && W.pageT < 4.4 ? Math.max(0, Math.sin(t * 11)) * (0.5 + 0.5 * Math.sin(t * 2.3)) : 0;
