@@ -8,6 +8,7 @@ import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 const C = {
   bear: 0xa4805f, bearEar: 0xd08a3e, cream: 0xefd9bd, belly: 0xd9bd9d,   // lighter, greyer taupe from the turnaround
   alien: 0xee5c9f,
+  croc: 0x4a6c34, crocBelly: 0xe6d3a6, crocBack: 0x34521f, crocGold: 0xe3a33d, bow: 0x8f5a33,
   black: 0x080706, white: 0xf8f6f1, mug: 0xefece6, coffee: 0x1a0f08, tooth: 0xf3c21a,
 };
 
@@ -310,6 +311,9 @@ function groundShadow(w, d, parent) {
   m.rotation.x = -Math.PI / 2; m.position.y = 0.005; parent.add(m); return m;
 }
 
+function smooth01(x) { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); }
+const smooth = smooth01;
+
 // =====================================================================
 // Bear (measured from the reference: ~2.9 tall, turned a little towards the bunny)
 // =====================================================================
@@ -325,6 +329,8 @@ bear.add(bearBody);
 // widest low down, small ears on top, slim arms lying along his sides, small round feet.
 const BEAR_PIVOT = [0, 1.46, 0.12];   // the arms swing from the shoulders when he drinks
 const BEAR_ARM_LIFT = 0.75;          // how far (radians) the arms swing up to drink
+// a big good-morning stretch: arms lifted a little, then swung up and out into a Y
+const BEAR_STRETCH = [[0.6, 0.1], [1.1, 0.3], [1.55, 0.45], [1.9, 0.6]].map(([lift, spread]) => ({ lift, spread, sx: 0.9 }));
 const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting on top of the fur
 {
   const body = S.lathe([[0, 0], [0.84, 0.0], [1.03, 0.08], [1.13, 0.3], [1.16, 0.6], [1.14, 0.95], [1.09, 1.35],
@@ -376,19 +382,29 @@ const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting 
     return c;
   };
   // Sculpt him with his arms at several heights, so every pose is a clean, properly blended surface.
-  var bearPoses = S.poses(BEAR_ARM_LIFT, BEAR_PIVOT, (armsAt, toRest) => {
+  const bearBuild = (armsAt, toRest, stretch) => {
     const sdf = (x, y, z) => {
       const b = body(x, y, z);
       const rest = S.smin(S.smin(S.smin(b, min2(ears, x, y, z), 0.07), tail(x, y, z), 0.06), min2(feet, x, y, z), 0.14);
       // the arm melts into his body along its whole length (no seam), easing off near the paw so it stays round
-      const toPaw = Math.hypot(Math.abs(x) - 0.56, y - 0.99, z - 1.08);
-      const k = 0.16 * Math.min(Math.max((toPaw - 0.18) / 0.3, 0), 1);
+      let k;
+      if (stretch) {   // arms up and away from the body: melt in only at the shoulder
+        const r = toRest(x, y, z), toShoulder = Math.hypot(Math.abs(r[0]) - 0.96, r[1] - 1.46, r[2] - 0.11);
+        k = 0.14 * Math.min(Math.max(1 - (toShoulder - 0.2) / 0.3, 0), 1);
+      } else {
+        const toPaw = Math.hypot(Math.abs(x) - 0.56, y - 0.99, z - 1.08);
+        k = 0.16 * Math.min(Math.max((toPaw - 0.18) / 0.3, 0), 1);
+      }
       const a = armsAt(arms, x, y, z);
       const withArms = k > 1e-4 ? S.smin(b, a, k) : Math.min(b, a);   // melts in at the shoulder only
       return Math.min(rest, withArms);
     };
-    return S.sculpt(sdf, [[-1.6, -0.15, -1.15], [1.6, 2.95, 1.65]], 0.028, () => 0, paint);
-  }, plushMaterial(0xffffff, 0, true, true, C.bear), bearBody);
+    return S.sculpt(sdf, stretch ? [[-2.4, -0.15, -1.15], [2.4, 3.4, 1.65]] : [[-1.6, -0.15, -1.15], [1.6, 2.95, 1.65]], 0.028, () => 0, paint);
+  };
+  const bearMat = plushMaterial(0xffffff, 0, true, true, C.bear);
+  var bearPoses = S.poses(BEAR_ARM_LIFT, BEAR_PIVOT, bearBuild, bearMat, bearBody);
+  // the stretch poses are sculpted after everything else (see the end of the characters)
+  var makeBearStretch = () => S.poses(0, BEAR_PIVOT, bearBuild, bearMat, bearBody, 0, BEAR_STRETCH);
   addFuzz(bearPoses, 0xffffff, 0.055, 210, true);
 }
 // Face, placed on the surface: eyes fairly high and wide, a round cream snout just below.
@@ -397,7 +413,9 @@ for (const s of [-1, 1]) furBlob(C.bearEar, [s * 0.64, 2.53, 0.13 + FUR_LIFT], [
 furBlob(C.cream, [0, 1.98, fz(0, 1.98) - 0.05], [0.28, 0.26, 0.17], bearBody, SHORTFUR);   // snout
 solid(M.black, [0, 2.09, fz(0, 1.98) + 0.1], [0.09, 0.065, 0.05], bearBody);                // nose
 { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.12, 8), M.mouth);
-  m.position.set(0, 1.97, fz(0, 1.98) + 0.115); m.rotation.x = 0.25; bearBody.add(m); }      // mouth line
+  m.position.set(0, 1.97, fz(0, 1.98) + 0.115); m.rotation.x = 0.25; bearBody.add(m); var bearMouthLine = m; }      // mouth line
+const bearYawn = solid(M.mouth, [0, 1.9, fz(0, 1.9) + 0.105], [0.075, 0.1, 0.04], bearBody);   // big round yawn
+bearYawn.visible = false;
 const EYE = { x: 0.37, y: 2.15 };
 const bearEyes = [-1, 1].map(s => solid(M.black, [s * EYE.x, EYE.y, fz(EYE.x, EYE.y)], [0.065, 0.065, 0.045], bearBody));
 // closed eyes are little arcs, as on the expression sheet: ∩ = happy (sipping), ∪ = sleepy (blinking)
@@ -525,6 +543,99 @@ const UA = (p) => [p[0] - ALI_PIVOT[0], p[1] - ALI_PIVOT[1], p[2] - ALI_PIVOT[2]
 const alienMug = mug(0.21, 0.42, alienArms);
 alienMug.position.set(...UA([0, 0.44, 0.58]));
 
+// Sculpted last, so the stored meshes for everything above stay in the same order.
+const bearStretch = makeBearStretch();
+bearStretch.meshes.forEach(m => (m.visible = false));
+
+// =====================================================================
+// Greg, Nom's plush crocodile (sculpted last too): big grin, cream jaw and belly, spots, a curly tail,
+// wonky golden horns and a little bow. Lies across Nom's tummy when hugged, head towards Barry.
+// =====================================================================
+const croc = new THREE.Group();
+alienBody.add(croc);
+{
+  const body = S.ellipsoid([-0.1, 0.02, 0], [0.37, 0.19, 0.19]);
+  const head = S.ellipsoid([0.3, 0.19, 0], [0.27, 0.3, 0.22]);          // big round head
+  const snout = S.ellipsoid([0.6, 0.11, 0], [0.31, 0.135, 0.175]);           // bulbous upper jaw
+  const jaw = S.ellipsoid([0.52, -0.035, 0], [0.3, 0.075, 0.155]);       // cream lower jaw
+  const tailPts = [[-0.4, 0.02, 0], [-0.6, 0.06, 0], [-0.76, 0.16, 0], [-0.84, 0.32, 0], [-0.8, 0.48, 0], [-0.68, 0.56, 0], [-0.56, 0.52, 0], [-0.53, 0.42, 0], [-0.6, 0.37, 0]];
+  const tail = S.softTube(tailPts, [0.15, 0.13, 0.11, 0.095, 0.08, 0.068, 0.058, 0.05, 0.042], 10);   // rising into a big curl
+  const legs = [[0.12, 1], [0.12, -1], [-0.3, 1], [-0.3, -1]].map(([x, s]) => {
+    const leg = S.roundCone([x, -0.06, s * 0.12], [x + 0.03, -0.19, s * 0.15], 0.085, 0.08);
+    const foot = S.ellipsoid([x + 0.06, -0.2, s * 0.15], [0.1, 0.055, 0.085]);
+    return (X, Y, Z) => S.smin(leg(X, Y, Z), foot(X, Y, Z), 0.03);
+  });
+  const band = S.softTube([0, 1, 2, 3, 4, 5, 6].map(i => { const a = 0.25 + i * (Math.PI - 0.5) / 6; return [0.2, 0.17 + Math.sin(a) * 0.272, Math.cos(a) * 0.222]; }),
+                          [0.045, 0.05, 0.052, 0.052, 0.052, 0.05, 0.045], 8);
+  const hornUp = S.softTube([[0.22, 0.4, 0.06], [0.23, 0.56, 0.07], [0.19, 0.7, 0.06], [0.11, 0.78, 0.04]], [0.065, 0.058, 0.046, 0.033], 10);      // tall one, curving back
+  const hornBack = S.softTube([[0.17, 0.4, -0.08], [0.06, 0.5, -0.1], [-0.08, 0.53, -0.1], [-0.2, 0.49, -0.08]], [0.062, 0.054, 0.044, 0.032], 10);  // the wonky one, swept back
+  const gold = (x, y, z) => Math.min(band(x, y, z), hornUp(x, y, z), hornBack(x, y, z));
+  const sdf = (x, y, z) => {
+    let d = S.smin(body(x, y, z), head(x, y, z), 0.1);
+    d = S.smin(d, snout(x, y, z), 0.08);
+    d = S.smin(d, jaw(x, y, z), 0.04);
+    d = S.smin(d, tail(x, y, z), 0.08);
+    for (const l of legs) d = S.smin(d, l(x, y, z), 0.05);
+    return S.smin(d, gold(x, y, z), 0.012);
+  };
+  const green = new THREE.Color(C.croc), cream = new THREE.Color(C.crocBelly), spotC = new THREE.Color(C.crocBack), goldC = new THREE.Color(C.crocGold);
+  const spots = [[-0.02, 0.19, 0.08], [-0.16, 0.2, 0.06], [-0.3, 0.18, 0.07], [-0.09, 0.13, 0.15], [-0.24, 0.12, 0.15], [-0.4, 0.13, 0.12],
+                 [0.04, 0.2, -0.06], [-0.2, 0.2, -0.07]];
+  const paint = (x, y, z) => {
+    if (gold(x, y, z) < 0.012) return [goldC.r, goldC.g, goldC.b];
+    let k = 0;
+    if (x > 0.3) k = smooth01((0.0 - y) / 0.02);                                   // cream lower jaw
+    else if (x > -0.45 && y > -0.13) k = smooth01((-0.06 - y) / 0.03);             // cream stripe along the belly
+    if (x < -0.42) k = Math.max(k, smooth01((0.2 - Math.hypot(x + 0.68, y - 0.34)) / 0.03), smooth01((0.0 - y) / 0.03));   // inside the tail curl
+    let col = [green.r + (cream.r - green.r) * k, green.g + (cream.g - green.g) * k, green.b + (cream.b - green.b) * k];
+    for (const [sx, sy, sz] of spots) if (Math.hypot(x - sx, y - sy, z - sz) < 0.052) col = [spotC.r, spotC.g, spotC.b];
+    return col;
+  };
+  const mesh = new THREE.Mesh(S.sculpt(sdf, [[-1.02, -0.3, -0.32], [0.96, 0.88, 0.32]], 0.014, () => 0, paint), plushMaterial(0xffffff, 0, true, true, C.croc));
+  croc.add(mesh);
+  // where the near side's surface is, so face details sit right on it
+  const side = (x, y) => { for (let z = 0.4; z > -0.1; z -= 0.003) if (sdf(x, y, z) < 0) return z; return 0; };
+  // big glossy eyes with a white glint, close together on top of the head
+  for (const [ex, ez] of [[0.44, 0.12], [0.43, -0.04]]) {
+    const ey = 0.33;
+    solid(M.black, [ex, ey, ez], [0.08, 0.085, 0.07], croc);
+    solid(M.white, [ex + 0.035, ey + 0.04, ez + 0.06], [0.02, 0.02, 0.01], croc);
+  }
+  for (const nz of [0.05, -0.04]) solid(M.black, [0.82, 0.205, nz], [0.022, 0.018, 0.02], croc);   // nostrils
+  // a wide grin: from the tip of the snout back, rising at the corner of the mouth
+  const grinPts = [[0.87, 0.04], [0.77, 0.01], [0.65, 0.0], [0.53, 0.005], [0.42, 0.035], [0.34, 0.09]];
+  const curve = new THREE.CatmullRomCurve3(grinPts.map(([x, y]) => new THREE.Vector3(x, y, side(x, y) + 0.004)));
+  croc.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.011, 6), M.mouth));
+  const toothMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel });
+  for (let i = 0; i < 7; i++) {
+    const p = curve.getPoint(0.06 + i * 0.12);
+    const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.021, 0.045, 10), toothMat);
+    tooth.position.set(p.x, p.y - 0.026, side(p.x, p.y - 0.026) + 0.003); tooth.rotation.z = Math.PI; croc.add(tooth);
+  }
+  // a little brown bow on its chest
+  const bowMat = new THREE.MeshToonMaterial({ color: C.bow, gradientMap: TOON_BANDS.cel });
+  const bow = new THREE.Group(); bow.position.set(0.2, -0.07, side(0.2, -0.07) + 0.012); bow.rotation.y = 0.25; croc.add(bow);
+  for (const s of [-1, 1]) {
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.013, 8, 20), bowMat); loop.position.set(s * 0.045, 0.008, 0); loop.scale.set(1, 0.7, 1); bow.add(loop);
+    const end = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.07, 6), bowMat); end.position.set(s * 0.024, -0.045, 0); end.rotation.z = s * 0.45; bow.add(end);
+  }
+  bow.add(new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 10), bowMat));
+}
+croc.visible = false;
+const CROC_HUG = { p: [0.04, 0.46, 0.68], r: [0, -0.4, 0.08] };
+const CROC_SCALE = 0.76;       // across Nom's tummy, resting on its paws
+const CROC_AWAY = { p: [-0.95, 0.35, -0.55], r: [0, 1.2, -0.6] };  // tucked away behind Nom
+
+// a little "clink!" sparkle for toasts
+const sparkTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'); g.translate(64, 64);
+  const star = (r1, r2, n) => { g.beginPath(); for (let i = 0; i < n * 2; i++) { const a = i * Math.PI / n - Math.PI / 2, r = i % 2 ? r2 : r1; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); };
+  star(58, 16, 4); g.fillStyle = '#ffe36b'; g.fill(); g.lineWidth = 6; g.strokeStyle = '#f2a81d'; g.stroke();
+  return new THREE.CanvasTexture(c);
+})();
+const sparks = [0, 1, 2].map(() => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, transparent: true, depthWrite: false })); sp.visible = false; scene.add(sp); return sp; });
+
 // =====================================================================
 // Steam from the bear's mug
 // =====================================================================
@@ -552,7 +663,6 @@ function updateSteam(t, strength) {
 // =====================================================================
 // Animation
 // =====================================================================
-const smooth = (x) => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
 /** 0 = resting, 1 = drinking. One sip every `period` seconds, about 3 s long. */
 function sip(t, period, offset) {
   if (params.has('rest')) return 0;
@@ -616,9 +726,19 @@ const blinking = (t, period, offset) => !params.has('rest') && ((t + offset) % p
 // =====================================================================
 const BEAR_MUG_HOLD = BA([0, 1.04, 1.24]), BEAR_MUG_FLOOR = BA([0, 0.24, 1.55]);   // mugs go down in front of their feet
 const ALIEN_MUG_HOLD = UA([0, 0.44, 0.58]), ALIEN_MUG_FLOOR = UA([0, 0.22, 0.78]);
-const D = { sleep: 0, lastT: null, bdayStart: null, thanksStart: null, pendingBday: false, pendingThanks: false, hats: false };
+const ALIEN_MUG_SIDE = UA([-0.55, 0.22, 0.62]);   // out of the way while Nom cuddles Greg
+const D = { sleep: params.has('preview') || params.has('rest') ? 0 : 1,   // they start the day asleep and wake up with a stretch
+            lastT: null, bdayStart: null, thanksStart: null, pendingBday: false, pendingThanks: false, hats: false,
+            deep: !(params.has('preview') || params.has('rest')), wakeStart: null,
+            crocMug: params.has('preview') || params.has('rest') ? 0 : 1, croc: params.has('preview') || params.has('rest') ? 0 : 1,   // Nom wakes up holding it
+            pendingAct: null, actStart: null, act: null };
+// Little things they do now and then while awake (one every 4-8 minutes), in this order.
+const ACTS = ['toast', 'croc', 'stretch', 'toast', 'croc', 'toast', 'stretch'];
+const ACT_LEN = { toast: 5, croc: 16, stretch: 6 };
+const ACT_TIMES = sipSchedule(13579, 150, 240, 480);
+window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; };
 let lastActivityMs = performance.now();
-window.playBirthday = () => { D.pendingBday = true; D.hats = true; lastActivityMs = performance.now(); };
+window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
 window.setBirthdayDay = (on) => { D.hats = !!on; };
 function wantsSleep() {
@@ -645,7 +765,46 @@ function direct(t) {
   const cheer = bdayT < BDAY_LEN ? Math.max(pulse(1.5, 5), pulse(11, 13.5)) : 0;
   const party = bdayT < BDAY_LEN ? smooth(Math.min(bdayT / 0.5, (BDAY_LEN - bdayT) / 1.0)) : 0;
   const thanks = thanksT < 4 ? smooth(Math.min(thanksT / 0.3, (4 - thanksT) / 0.5)) : 0;
-  return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || params.has('bday') || params.has('hats') };
+
+  // waking up: once properly asleep, the moment they wake they have a big stretch and a yawn
+  if (D.sleep > 0.95) D.deep = true;
+  if (D.deep && D.sleep < 0.9) { D.deep = false; D.wakeStart = t; }
+  let wakeT = params.has('wake') ? +params.get('wake') : (D.wakeStart === null ? Infinity : t - D.wakeStart);
+
+  // the occasional activity
+  let act = null, actT = Infinity;
+  if (params.has('act')) { act = params.get('act'); actT = +(params.get('at') || 0); }
+  else {
+    if (D.pendingAct) { D.act = D.pendingAct; D.actStart = t; D.pendingAct = null; }
+    else if (!params.has('preview') && !params.has('rest') && D.sleep < 0.01 && bdayT === Infinity && wakeT > 8) {
+      const a = lastStart(t, ACT_TIMES);
+      if (a.since < 0.1 && D.act === null) { D.act = ACTS[a.i % ACTS.length]; D.actStart = t; }
+    }
+    if (D.act) { actT = t - D.actStart; act = D.act; if (actT > ACT_LEN[act] || D.sleep > 0.3) { D.act = null; act = null; actT = Infinity; } }
+  }
+  if (act === 'stretch') { wakeT = actT; act = null; }          // the same stretch as on waking
+
+  // Nom's crocodile: comes out for a cuddle, and always when Nom is asleep
+  const wantCroc = (act === 'croc' && actT < ACT_LEN.croc - 2.6) || D.sleep > 0.5;
+  if (params.has('croc')) { D.crocMug = 1; D.croc = +params.get('croc'); }
+  else if (wantCroc) { D.crocMug = Math.min(1, D.crocMug + dt / 0.9); if (D.crocMug >= 1) D.croc = Math.min(1, D.croc + dt / 0.8); }
+  else { D.croc = Math.max(0, D.croc - dt / 0.8); if (D.croc <= 0) D.crocMug = Math.max(0, D.crocMug - dt / 0.9); }
+
+  // the stretch: Barry's arms go up 0.8-2 s, stay till 3.8 s, come down by 4.8 s; mugs back up by 6.5 s
+  const stretch = wakeT < 6.5 ? smooth(Math.min((wakeT - 0.8) / 1.2, (4.8 - wakeT) / 1.0)) : 0;
+  const yawn = wakeT < 6.5 ? smooth(Math.min((wakeT - 1.2) / 0.6, (3.9 - wakeT) / 0.6)) : 0;
+  const nomYawn = wakeT < 6.5 ? smooth(Math.min((wakeT - 2.2) / 0.5, (4.4 - wakeT) / 0.5)) : 0;
+  const wakeHold = wakeT < 6.5 ? 1 - smooth((wakeT - 5) / 1.5) : 0;
+
+  // the toast: turn towards each other 0-1 s, clink at 1.5 s, a sip together, settle back by 5 s
+  const toastT = act === 'toast' ? actT : Infinity;
+  const toastTurn = toastT < 5 ? smooth(Math.min(toastT / 1.0, (5 - toastT) / 1.0)) : 0;
+  const toastRaise = toastT < 5 ? Math.max(0.5 * smooth(Math.min((toastT - 0.4) / 0.8, (4.2 - toastT) / 0.6)),
+                                            smooth(Math.min((toastT - 1.9) / 0.6, (3.6 - toastT) / 0.6))) : 0;
+  const clink = toastT < 5 ? Math.max(0, 1 - Math.abs(toastT - 1.6) / 0.35) : 0;
+  return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
+           stretch, yawn, nomYawn, wakeHold, croc: D.croc, crocMug: D.crocMug, crocHug: act === 'croc' ? actT : -1,
+           toastTurn, toastRaise, clink };
 }
 const BDAY_LEN = 22;
 
@@ -709,23 +868,33 @@ function pose(t) {
   const W = direct(t);                         // what the director says is happening
   const zz = smooth((W.sleep - 0.45) / 0.55);  // eyes closed / leaning: second half of falling asleep
   const mugDown = smooth(Math.min(1, W.sleep / 0.45));   // first half: put the mugs down
+  const bearDown = Math.max(mugDown, W.wakeHold);                       // Barry's mug stays down while he stretches
+  const nomDown = Math.max(mugDown, W.wakeHold, smooth(W.crocMug));     // Nom's too, and while it cuddles its crocodile
   // Bear: breathes; sips now and then; on birthdays he raises his mug for a toast.
   let bs = params.has('preview') ? sip(t, 9, 4.8) : sipAt(t, BEAR_SIPS);
-  bs = Math.max(bs * (1 - mugDown), W.cheer * 0.6);
+  bs = Math.max(bs * (1 - bearDown), W.cheer * 0.6, W.toastRaise * 0.8);
   const breath = 1 + (0.012 + 0.014 * zz) * Math.sin(t * (1.6 - 0.8 * zz));   // slower, deeper breaths when asleep
-  bearBody.scale.set(1 + (breath - 1) * 0.5, breath, 1);
-  bearBody.rotation.x = 0.07 * zz;             // head nods forward
-  bearBody.rotation.z = -0.025 * zz;
-  bearMug.position.set(...lerp3(BEAR_MUG_HOLD, BEAR_MUG_FLOOR, mugDown));
-  bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
+  const tall = 1 + 0.045 * W.stretch;          // stretching up tall
+  bearBody.scale.set((1 + (breath - 1) * 0.5) / Math.sqrt(tall), breath * tall, 1);
+  bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch;   // head nods forward asleep, leans back to stretch
+  bearBody.rotation.z = -0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
+  if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn;    // turns towards Nom for a toast
+  bearMug.position.set(...lerp3(BEAR_MUG_HOLD, BEAR_MUG_FLOOR, bearDown));
+  bearArms.rotation.x = -BEAR_ARM_LIFT * bs * (1 - bearDown);
   bearPoses.show(bs);
-  bearMug.rotation.x = (MUG_TILT + BEAR_ARM_LIFT * bs - (0.5 + MUG_TILT) * smooth((bs - 0.6) / 0.4)) * (1 - mugDown);
-  const happy = (bs > 0.5 && W.cheer < 0.5) || W.party > 0.5 || W.thanks > 0.5;
+  if (W.stretch > 0.06) {                       // arms up in a big Y
+    bearPoses.meshes.forEach(m => (m.visible = false));
+    bearStretch.showExtra(Math.min(BEAR_STRETCH.length - 1, Math.round(W.stretch * BEAR_STRETCH.length - 0.5)));
+  } else bearStretch.meshes.forEach(m => (m.visible = false));
+  bearMug.rotation.x = (MUG_TILT + BEAR_ARM_LIFT * bs - (0.5 + MUG_TILT) * smooth((bs - 0.6) / 0.4)) * (1 - bearDown);
+  bearYawn.visible = W.yawn > 0.05; bearMouthLine.visible = !bearYawn.visible;
+  bearYawn.scale.set(0.075 * (0.6 + 0.4 * W.yawn), 0.1 * W.yawn, 0.04);
+  const happy = (bs > 0.5 && W.cheer < 0.5) || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
   const sleepy = !happy && (zz > 0.5 || blinking(t, 4.7, 1));
   bearEyes.forEach(e => (e.visible = !happy && !sleepy));
   bearHappy.forEach(e => (e.visible = happy));
   bearSleepy.forEach(e => (e.visible = sleepy));
-  updateSteam(t, (1 - bs) * (1 - mugDown));
+  updateSteam(t, (1 - bs) * (1 - bearDown));
   bearHat.visible = alienHat.visible = W.hats;
   updateConfetti(W.bdayT);
   bearBody.updateMatrixWorld(); alienBody.updateMatrixWorld();
@@ -734,8 +903,8 @@ function pose(t) {
 
   // Alien: sways, hops every 5 s, drinks every 7 s, blinks, glances over at the bear.
   let us = params.has('preview') ? sip(t, 7, 6.3) : sipAt(t, ALIEN_SIPS);
-  us = Math.max(us * (1 - mugDown), W.cheer * 0.7);
-  alienMug.position.set(...lerp3(ALIEN_MUG_HOLD, ALIEN_MUG_FLOOR, mugDown));
+  us = Math.max(us * (1 - nomDown), W.cheer * 0.7, W.toastRaise * 0.85);
+  alienMug.position.set(...lerp3(ALIEN_MUG_HOLD, lerp3(ALIEN_MUG_FLOOR, ALIEN_MUG_SIDE, smooth(W.crocMug)), nomDown));
   // how long since its last sip began (for the contented "mmm" afterwards)
   const sinceSip = params.has('preview') ? (((t + 6.3) % 7) >= 3.8 ? ((t + 6.3) % 7) - 3.8 : ((t + 6.3) % 7) + 3.2)
                                          : lastStart(t, ALIEN_SIPS).since;
@@ -747,7 +916,8 @@ function pose(t) {
     if (m.since < 3.6 && us === 0 && !afterSip) { mood = MOODS[m.i % MOODS.length]; moodT = m.since; }
   }
   if (mood === 'content') mood = null;
-  if (W.sleep > 0.05) mood = null;
+  if (W.sleep > 0.05 || W.nomYawn > 0 || W.croc > 0 || W.toastTurn > 0) mood = null;
+  const cuddle = W.croc > 0.95 && W.sleep < 0.3;     // awake and hugging the crocodile
   if (W.party > 0.3 || W.thanks > 0.3) { mood = 'giggle'; moodT = (W.thanks > 0.3 ? t : W.bdayT) % 3.6; }   // giggly on birthdays
   const ease = mood ? smooth(Math.min(moodT / 0.4, (3.6 - moodT) / 0.4)) : 0;   // fade in and out
 
@@ -758,20 +928,50 @@ function pose(t) {
   let tilt = params.has('rest') ? 0 : 0.035 * Math.sin(t * 1.3);
   if (mood === 'curious') tilt += 0.14 * ease;                  // head tilt
   if (mood === 'sleepy') tilt += 0.07 * ease * Math.sin(moodT * 1.2);   // slow, dozy sway
+  if (cuddle) tilt += 0.09 * Math.sin(t * 2.2);              // rocking the crocodile side to side
+  tilt -= 0.07 * W.toastTurn;                                  // leans in for a toast
   alienBody.rotation.z = tilt * (1 - zz) - 0.17 * zz;   // asleep: leans over onto Barry
+  if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn;
+  const nomTall = 1 + 0.06 * W.nomYawn;
+  alienBody.scale.set(1 / Math.sqrt(nomTall), nomTall, 1);
   if (D.alienX === undefined) D.alienX = alien.position.x;
   alien.position.x = D.alienX + 0.06 * zz;
-  alienArms.rotation.x = -ALIEN_ARM_LIFT * us;
+  alienArms.rotation.x = -ALIEN_ARM_LIFT * us * (1 - nomDown);
   alienPoses.show(us);
-  alienMug.rotation.x = (MUG_TILT + ALIEN_ARM_LIFT * us - (0.4 + MUG_TILT) * smooth((us - 0.6) / 0.4)) * (1 - mugDown);
-  alienMug.rotation.z = -alienBody.rotation.z * mugDown;   // the mug on the floor stays upright while Nom leans
+  alienMug.rotation.x = (MUG_TILT + ALIEN_ARM_LIFT * us - (0.4 + MUG_TILT) * smooth((us - 0.6) / 0.4)) * (1 - nomDown);
+  alienMug.rotation.z = -alienBody.rotation.z * nomDown;   // the mug on the floor stays upright while Nom leans
+
+  // the crocodile: arcs out from behind Nom into its arms (and back again)
+  croc.visible = W.croc > 0.001 || params.has('greg');
+  if (croc.visible && !params.has('greg')) {
+    const k = smooth(W.croc), hop = Math.sin(Math.PI * k) * 0.55;
+    croc.position.set(...lerp3(CROC_AWAY.p, CROC_HUG.p, k)); croc.position.y += hop;
+    croc.rotation.set(...lerp3(CROC_AWAY.r, CROC_HUG.r, k));
+    const sq = cuddle ? 1 - 0.05 * Math.max(0, Math.sin(t * 4.4)) : 1;   // a squeeze now and then
+    croc.scale.set(CROC_SCALE * sq, CROC_SCALE / sq, CROC_SCALE);
+  }
+
+  // clink!
+  if (W.clink > 0) {
+    bearMug.userData.top.getWorldPosition(_zp); const bx = _zp.x, by = _zp.y, bz = _zp.z;
+    alienMug.userData.top.getWorldPosition(_zp);
+    const mx = (bx + _zp.x) / 2, my = (by + _zp.y) / 2 + 0.05, mz = Math.max(bz, _zp.z) + 0.1;
+    sparks.forEach((sp, i) => {
+      sp.visible = true;
+      const sz = (i === 0 ? 0.42 : 0.18) * smooth(W.clink * 1.5);
+      sp.scale.set(sz, sz, sz);
+      sp.position.set(mx + (i === 0 ? 0 : (i === 1 ? -0.28 : 0.3)), my + (i === 0 ? 0 : 0.22 + i * 0.05), mz);
+      sp.material.rotation = i * 0.6 + W.clink;
+      sp.material.opacity = Math.min(1, W.clink * 2);
+    });
+  } else sparks.forEach(sp => (sp.visible = false));
 
   // eyes
   const blink = blinking(t, 3.9, 0.5);
   const gp = t % 13, glance = !params.has('rest') && !mood && gp > 5 && gp < 7;
   const sipping = us > 0.5;
   const mmm = params.get('expr') === 'content' || (!mood && afterSip && sinceSip < 4.8);   // eyes stay happily closed just after a sip
-  const happyEyes = zz < 0.5 && ((sipping && W.cheer < 0.5) || mmm || mood === 'giggle');
+  const happyEyes = zz < 0.5 && ((sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
   const sleepyEyes = zz > 0.5 || mood === 'sleepy' || (blink && !happyEyes);
   const wide = mood === 'curious' ? 1 + 0.15 * ease : 1;
   alienEyes.forEach(({ white, pupil, s, sleepy, happy }) => {
@@ -786,7 +986,9 @@ function pose(t) {
   });
 
   // mouth: closed while drinking and for a while after, a small "o" when curious, a smile when giggly or sleepy
-  if (zz > 0.3) setMouth('smile');
+  mouthO.scale.set(0.045 * (1 + 0.6 * W.nomYawn), 0.055 * (1 + 1.3 * W.nomYawn), 0.02);
+  if (W.nomYawn > 0.05) setMouth('o');                       // a big yawn
+  else if (zz > 0.3 || cuddle) setMouth('smile');
   else if (mood === 'curious') setMouth('o');
   else if (mood === 'giggle' || mood === 'sleepy' || afterSip || us > 0.3 || params.get('expr') === 'content') setMouth('smile');
   else setMouth('open');
@@ -794,10 +996,12 @@ function pose(t) {
 
 // ?solo&turn=<degrees> shows the bear on his own, turned, for checking him against the turnaround sheet
 if (params.has('soloalien')) { bear.visible = false; alien.position.set(-0.45, 0, 0); alien.scale.setScalar(1.2); alien.rotation.y = THREE.MathUtils.degToRad(+params.get('turn') || 0); if (params.has('nomug')) alienMug.visible = false; }
+if (params.has('greg')) { bear.visible = false; alien.visible = false; scene.add(croc); croc.position.set(-0.4, 1.0, 0.8); croc.scale.setScalar(1.75); croc.rotation.y = -0.3; }   // Greg on his own
 if (params.has('solo')) { if (params.has('nomug')) bearMug.visible = false; alien.visible = false; bear.position.x = -0.45; bear.rotation.y = THREE.MathUtils.degToRad(+params.get('turn') || 0); }
 const outline = STYLE === 'toon' ? new OutlineEffect(renderer, { defaultThickness: 0.0045, defaultColor: [0.16, 0.11, 0.08] }) : null;
 function renderAt(t) { pose(t); (outline || renderer).render(scene, camera); }
 window.renderAt = renderAt;
+window.__params = params;   // (for test stills)
 
 if (!params.has('preview')) {
   const start = performance.now();

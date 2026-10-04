@@ -141,7 +141,8 @@ export function lathe(profile, sx, sz) {
  * Adds per-vertex soft shading ("ao") that darkens creases where parts meet.
  */
 export function sculpt(sdf, bounds, step, armWeight, colorFn = null) {
-  if (BAKED) return BAKED[bakeIndex++];   // already sculpted and stored inside the app
+  if (BAKED && bakeIndex < BAKED.length) return BAKED[bakeIndex++];   // already sculpted and stored inside the app
+  if (BAKED) bakeIndex++;               // anything newer than the stored set is sculpted live
   const [[x0, y0, z0], [x1, y1, z1]] = bounds;
   const dims = [Math.ceil((x1 - x0) / step) + 1, Math.ceil((y1 - y0) / step) + 1, Math.ceil((z1 - z0) / step) + 1];
   const { positions, cells } = surfaceNets(dims, sdf, bounds);
@@ -216,23 +217,32 @@ export function skinnedBody(geometry, material, pivot, parent) {
  * Sculpt a character several times with its arms swung up by 0..maxAngle around `pivot` (about the x axis),
  * and show whichever pose is nearest. build(armsAt) gets a helper that evaluates the arm shapes in that pose.
  */
-export function poses(maxAngle, pivot, build, material, parent, count = 9) {
+export function poses(maxAngle, pivot, build, material, parent, count = 9, extras = []) {
+  // extras: additional poses {lift, spread, sx}: arms lifted forward by `lift`, then swung outwards
+  // by `spread` around the shoulders (at x = ±sx), e.g. for a big stretch
   const meshes = [];
   const p = new V();
-  for (let k = 0; k < count; k++) {
-    const ang = -maxAngle * k / (count - 1);
-    const c = Math.cos(-ang), sn = Math.sin(-ang);
+  for (let k = 0; k < count + extras.length; k++) {
+    const e = k < count ? { lift: maxAngle * k / (count - 1), spread: 0, sx: 0 } : extras[k - count];
+    const c = Math.cos(e.lift), sn = Math.sin(e.lift);
+    const cs = Math.cos(e.spread), ss = Math.sin(e.spread);
+    // where a point on the moved arm sat in the resting pose
+    const toRest = (x, y, z) => {
+      if (e.spread) {                       // undo the outward swing (around this side's shoulder)
+        const side = x < 0 ? -1 : 1, s = -side, ox = side * e.sx, dx = x - ox, dy = y - pivot[1];   // swings up and out
+        x = ox + dx * cs + dy * ss * s; y = pivot[1] - dx * ss * s + dy * cs;
+      }
+      const yy = y - pivot[1], zz = z - pivot[2];   // undo the forward lift
+      return [x, pivot[1] + yy * c - zz * sn, pivot[2] + yy * sn + zz * c];
+    };
     const armsAt = (arms, x, y, z) => {
-      // undo the arm rotation, then measure against the resting arm shapes
-      const yy = y - pivot[1], zz = z - pivot[2];
-      p.set(x, pivot[1] + yy * c - zz * sn, pivot[2] + yy * sn + zz * c);
+      const r = toRest(x, y, z);
+      if (e.spread) return arms[x < 0 ? 0 : 1](r[0], r[1], r[2]);   // each side only swings its own arm
       let d = Infinity;
-      for (const a of arms) d = Math.min(d, a(p.x, p.y, p.z));
+      for (const a of arms) d = Math.min(d, a(r[0], r[1], r[2]));
       return d;
     };
-    // where a point on the moved arm sat in the resting pose (so painted details travel with the arm)
-    const toRest = (x, y, z) => { const yy = y - pivot[1], zz = z - pivot[2]; return [x, pivot[1] + yy * c - zz * sn, pivot[2] + yy * sn + zz * c]; };
-    const mesh = new THREE.Mesh(build(armsAt, toRest), material);
+    const mesh = new THREE.Mesh(build(armsAt, toRest, k >= count), material);
     mesh.visible = k === 0;
     parent.add(mesh);
     meshes.push(mesh);
@@ -243,6 +253,8 @@ export function poses(maxAngle, pivot, build, material, parent, count = 9) {
       const k = Math.round(Math.min(Math.max(amount, 0), 1) * (count - 1));
       meshes.forEach((m, i) => (m.visible = i === k));
     },
+    /** show extra pose j (0-based) */
+    showExtra(j) { meshes.forEach((m, i) => (m.visible = i === count + j)); },
   };
 }
 

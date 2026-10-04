@@ -401,6 +401,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         moveItem = menu.addItem(withTitle: "Move with Mouse", action: #selector(toggleMoveMode), keyEquivalent: "")
         moveItem.target = self
         menu.addItem(.separator())
+        // They do these by themselves now and then; this lets you ask for one.
+        let doItem = menu.addItem(withTitle: "Ask Them To", action: nil, keyEquivalent: "")
+        let doMenu = NSMenu()
+        for (title, name) in [("Make a Toast 🥂", "toast"), ("Cuddle Greg 🐊", "croc"), ("Have a Stretch", "stretch")] {
+            let item = doMenu.addItem(withTitle: title, action: #selector(doActivity(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = name
+        }
+        doItem.submenu = doMenu
         birthdayItem = menu.addItem(withTitle: "🎂 Play Birthday Message", action: #selector(playBirthday), keyEquivalent: "")
         birthdayItem.target = self
         birthdayItem.isHidden = true
@@ -661,6 +670,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         a.informativeText = text
         NSApp.activate(ignoringOtherApps: true)
         a.runModal()
+    }
+
+    @objc func doActivity(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        if !panel.isVisible { toggleVisible() }
+        webView.evaluateJavaScript("window.doActivity && window.doActivity('\(name)')", completionHandler: nil)
     }
 
     @objc func toggleVisible() {
