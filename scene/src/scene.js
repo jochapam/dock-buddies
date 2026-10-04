@@ -634,6 +634,88 @@ alienBody.add(croc);
 croc.visible = false;
 const nomStretch = makeNomStretch();          // sculpted after Greg, so the stored order stays the same
 nomStretch.meshes.forEach(m => (m.visible = false));
+
+// =====================================================================
+// Story time: a picture book Barry holds open towards Nom, and little pictures in a speech bubble
+// =====================================================================
+/** Little drawings for the book's pages and the speech bubble. */
+const DOODLES = [
+  (g, s) => {   // the moon and stars
+    g.fillStyle = '#ffd34d'; g.beginPath(); g.arc(0, 0, s * 0.42, 0, Math.PI * 2); g.fill();
+    g.fillStyle = g.__bg; g.beginPath(); g.arc(s * 0.2, -s * 0.12, s * 0.36, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ffd34d';
+    for (const [x, y, r] of [[0.42, -0.35, 0.09], [0.5, 0.28, 0.06], [-0.05, 0.5, 0.05]]) star(g, x * s, y * s, r * s);
+  },
+  (g, s) => {   // Greg
+    g.fillStyle = '#5b8a3c'; g.beginPath(); g.ellipse(-s * 0.08, s * 0.12, s * 0.42, s * 0.2, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(s * 0.32, -s * 0.02, s * 0.24, s * 0.2, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#eedfb8'; g.beginPath(); g.ellipse(s * 0.4, s * 0.1, s * 0.2, s * 0.06, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#e3a33d'; g.lineWidth = s * 0.07; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(s * 0.26, -s * 0.18); g.quadraticCurveTo(s * 0.28, -s * 0.42, s * 0.14, -s * 0.48); g.stroke();
+    g.beginPath(); g.moveTo(s * 0.18, -s * 0.16); g.quadraticCurveTo(s * 0.02, -s * 0.3, -s * 0.12, -s * 0.26); g.stroke();
+    g.fillStyle = '#111'; g.beginPath(); g.arc(s * 0.38, -s * 0.1, s * 0.05, 0, Math.PI * 2); g.fill();
+  },
+  (g, s) => {   // a little house with a lit window
+    g.fillStyle = '#c98b5a'; g.fillRect(-s * 0.32, -s * 0.05, s * 0.64, s * 0.45);
+    g.fillStyle = '#e0605a'; g.beginPath(); g.moveTo(-s * 0.42, -s * 0.03); g.lineTo(0, -s * 0.42); g.lineTo(s * 0.42, -s * 0.03); g.fill();
+    g.fillStyle = '#ffd34d'; g.fillRect(-s * 0.2, s * 0.06, s * 0.16, s * 0.14);
+    g.fillStyle = '#7a4a2e'; g.fillRect(s * 0.06, s * 0.12, s * 0.14, s * 0.28);
+  },
+  (g, s) => {   // a heart
+    g.fillStyle = '#ff6b9a'; g.beginPath(); g.moveTo(0, s * 0.38);
+    g.bezierCurveTo(-s * 0.55, 0, -s * 0.35, -s * 0.48, 0, -s * 0.18);
+    g.bezierCurveTo(s * 0.35, -s * 0.48, s * 0.55, 0, 0, s * 0.38); g.fill();
+  },
+];
+function star(g, x, y, r) {
+  g.beginPath(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, rr = i % 2 ? r * 0.45 : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  g.closePath(); g.fill();
+}
+function pageTexture(i) {
+  const c = document.createElement('canvas'); c.width = 192; c.height = 256;
+  const g = c.getContext('2d'); g.__bg = '#fbf6ea'; g.fillStyle = g.__bg; g.fillRect(0, 0, 192, 256);
+  g.save(); g.translate(96, 100); DOODLES[i % DOODLES.length](g, 130); g.restore();
+  g.strokeStyle = '#c9bfae'; g.lineWidth = 6; g.lineCap = 'round';      // lines of writing
+  for (const [y, w] of [[190, 120], [212, 140], [234, 90]]) { g.beginPath(); g.moveTo(96 - w / 2, y); g.lineTo(96 + w / 2, y); g.stroke(); }
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+}
+const PAGES = DOODLES.map((_, i) => pageTexture(i)).concat(DOODLES.map((_, i) => pageTexture(i + 2)));
+function bubbleTexture(i) {
+  const c = document.createElement('canvas'); c.width = c.height = 160;
+  const g = c.getContext('2d'); g.__bg = '#ffffff';
+  g.fillStyle = '#ffffff'; g.strokeStyle = '#d8cdbd'; g.lineWidth = 5;
+  g.beginPath(); g.ellipse(80, 72, 70, 60, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(98, 126); g.lineTo(122, 154); g.lineTo(76, 130); g.fill();   // little tail, pointing down to Barry
+  g.save(); g.translate(80, 74); DOODLES[i % DOODLES.length](g, 82); g.restore();
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+}
+const BUBBLES = DOODLES.map((_, i) => bubbleTexture(i));
+const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: BUBBLES[0], transparent: true, depthWrite: false }));
+bubble.visible = false; scene.add(bubble);
+
+const book = new THREE.Group();
+bearArms.add(book);
+book.position.set(...BA([0, 1.13, 1.42]));
+book.rotation.y = -0.3;                           // turned a little towards Nom
+const toonMat = (color, map = null) => new THREE.MeshToonMaterial({ color, map, gradientMap: TOON_BANDS.cel, side: THREE.DoubleSide });
+const BOOK_W = 0.5, BOOK_H = 0.64;
+function bookHalf(side) {
+  const g = new THREE.Group();
+  const cover = new THREE.Mesh(new RoundedBoxGeometry(BOOK_W + 0.03, BOOK_H + 0.05, 0.03, 2, 0.012), toonMat(0x3f74b8));
+  cover.position.set(side * (BOOK_W / 2 + 0.01), 0, -0.02); g.add(cover);
+  const block = new THREE.Mesh(new THREE.BoxGeometry(BOOK_W, BOOK_H, 0.03), toonMat(0xf3ecdc));
+  block.position.set(side * BOOK_W / 2, 0, 0.0); g.add(block);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(BOOK_W * 0.96, BOOK_H * 0.96), toonMat(0xffffff, PAGES[0]));
+  face.position.set(side * BOOK_W / 2, 0, 0.016); g.add(face);
+  g.userData.face = face; book.add(g); return g;
+}
+const bookL = bookHalf(-1), bookR = bookHalf(1);
+const flip = new THREE.Group(); book.add(flip);      // the page being turned, hinged at the spine
+const flipFront = new THREE.Mesh(new THREE.PlaneGeometry(BOOK_W * 0.96, BOOK_H * 0.96), new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel, side: THREE.FrontSide }));
+const flipBack = new THREE.Mesh(new THREE.PlaneGeometry(BOOK_W * 0.96, BOOK_H * 0.96), new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel, side: THREE.BackSide }));
+for (const m of [flipFront, flipBack]) { m.position.x = BOOK_W / 2; flip.add(m); }
+flip.position.z = 0.022;
+book.visible = false;
 const CROC_HUG = { p: [0.04, 0.46, 0.68], r: [0, -0.4, 0.08] };
 const CROC_SCALE = 0.76;       // across Nom's tummy, resting on its paws
 const CROC_AWAY = { p: [-0.35, 0.2, -0.55], r: [0, 0.3, 0.0] };    // put down behind Nom
@@ -751,8 +833,8 @@ const D = { sleep: params.has('preview') || params.has('rest') ? 0 : 1,   // the
             croc: params.has('preview') || params.has('rest') ? 0 : 1,   // Nom wakes up holding Greg
             pendingAct: null, actStart: null, act: null };
 // Little things they do now and then while awake (one every 4-8 minutes), in this order.
-const ACTS = ['toast', 'croc', 'stretch', 'toast', 'croc', 'toast', 'stretch'];
-const ACT_LEN = { toast: 5, croc: 19, stretch: 10 };
+const ACTS = ['toast', 'croc', 'story', 'stretch', 'toast', 'croc', 'toast', 'story', 'stretch'];
+const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48 };
 const MUG_MOVE = 1.6;    // seconds to bend down and put a mug on the floor (or pick it up)
 const ACT_TIMES = sipSchedule(13579, 150, 240, 480);
 window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; };
@@ -797,17 +879,23 @@ function direct(t) {
     if (D.pendingAct) { D.act = D.pendingAct; D.actStart = t; D.pendingAct = null; }
     else if (!params.has('preview') && !params.has('rest') && D.sleep < 0.01 && bdayT === Infinity && wakeT > 8) {
       const a = lastStart(t, ACT_TIMES);
-      if (a.since < 0.1 && D.act === null) { D.act = ACTS[a.i % ACTS.length]; D.actStart = t; }
+      if (a.since < 0.1 && D.act === null) {
+        D.act = ACTS[a.i % ACTS.length]; D.actStart = t;
+        // in the evening, story time is the favourite (at most once an hour)
+        const h = new Date().getHours();
+        if ((h >= 19 || h < 5) && (D.lastStory === undefined || t - D.lastStory > 3600)) D.act = 'story';
+        if (D.act === 'story') D.lastStory = t;
+      }
     }
     if (D.act) { actT = t - D.actStart; act = D.act; if (actT > ACT_LEN[act] || D.sleep > 0.3) { D.act = null; act = null; actT = Infinity; } }
   }
   if (act === 'stretch') { wakeT = actT - MUG_MOVE - 0.2; act = null; }   // the same stretch as on waking, once the mugs are down
 
   // Nom's crocodile: comes out for a cuddle, and always when Nom is asleep
-  const wantCroc = (act === 'croc' && actT < ACT_LEN.croc - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;
+  const wantCroc = ((act === 'croc' || act === 'story') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories too
   // mugs: put down (bending over) before sleeping, stretching or cuddling Greg; picked up again afterwards
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
-  const bearWants = D.sleep > 0.02 || stretchWindow;
+  const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2);
   const nomWants = bearWants || wantCroc || D.croc > 0;
   const step = (v, up) => up ? Math.min(1, v + dt / MUG_MOVE) : Math.max(0, v - dt / MUG_MOVE);
   if (params.has('mug')) D.bMug = D.nMug = +params.get('mug');
@@ -823,6 +911,16 @@ function direct(t) {
   const nomStretchAmt = wakeT < 6.5 ? smooth(Math.min((wakeT - 2.0) / 0.7, (4.7 - wakeT) / 0.7)) : 0;
 
   // the toast: turn towards each other 0-1 s, clink at 1.5 s, a sip together, settle back by 5 s
+  // story time: mugs down, the book opens at 2.4 s, a page turns every 5 s, Nom dozes off towards the end,
+  // the book closes at 42 s, then mugs back up
+  const storyT = act === 'story' ? actT : Infinity;
+  const BOOK_ON = 2.0, BOOK_OFF = 43;
+  const bookOut = storyT < ACT_LEN.story ? smooth(Math.min((storyT - BOOK_ON) / 0.6, (BOOK_OFF + 0.8 - storyT) / 0.6)) : 0;
+  const bookOpen = storyT < ACT_LEN.story ? smooth(Math.min((storyT - BOOK_ON - 0.6) / 0.8, (BOOK_OFF - storyT) / 0.8)) : 0;
+  const reading = storyT > 4 && storyT < BOOK_OFF - 1;
+  const page = reading ? Math.floor((storyT - 4) / 5) : 0, pageT = reading ? ((storyT - 4) % 5) : 0;
+  const doze = storyT < ACT_LEN.story ? smooth(Math.min((storyT - 26) / 8, (BOOK_OFF + 1.5 - storyT) / 1.5)) : 0;
+
   const toastT = act === 'toast' ? actT : Infinity;
   const toastTurn = toastT < 5 ? smooth(Math.min(toastT / 1.0, (5 - toastT) / 1.0)) : 0;
   const toastRaise = toastT < 5 ? Math.max(0.5 * smooth(Math.min((toastT - 0.4) / 0.8, (4.2 - toastT) / 0.6)),
@@ -830,7 +928,7 @@ function direct(t) {
   const clink = toastT < 5 ? Math.max(0, 1 - Math.abs(toastT - 1.6) / 0.35) : 0;
   return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
            stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
-           toastTurn, toastRaise, clink };
+           toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze };
 }
 const BDAY_LEN = 22;
 
@@ -915,7 +1013,7 @@ function pose(t) {
   const bearDown = W.bMug, nomDown = W.nMug;   // 0 = mug in hand, 1 = on the floor (in between: bending to put it down / pick it up)
   // Bear: breathes; sips now and then; on birthdays he raises his mug for a toast.
   let bs = params.has('preview') ? sip(t, 9, 4.8) : sipAt(t, BEAR_SIPS);
-  bs = Math.max(bs * (1 - bearDown), W.cheer * 0.6, W.toastRaise * 0.8);
+  bs = Math.max(bs * (1 - bearDown), W.cheer * 0.6, W.toastRaise * 0.8, W.bookOut * 0.35);   // holds the book up a little
   const breath = 1 + (0.012 + 0.014 * zz) * Math.sin(t * (1.6 - 0.8 * zz));   // slower, deeper breaths when asleep
   const tall = 1 + 0.045 * W.stretch;          // stretching up tall
   const bSquash = 1 - 0.09 * Math.sin(Math.PI * W.bMug);   // squashes down a little as he bends over
@@ -924,7 +1022,7 @@ function pose(t) {
   bearBody.rotation.z = -0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
   if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn;    // turns towards Nom for a toast
   pivotAbout(bearBody, BEAR_BEND_AT);
-  bearArms.rotation.x = -BEAR_ARM_LIFT * bs * (1 - bearDown);
+  bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
   bearPoses.show(bs);
   if (W.stretch > 0.06) {                       // arms up in a big Y
     bearPoses.meshes.forEach(m => (m.visible = false));
@@ -932,9 +1030,38 @@ function pose(t) {
   } else bearStretch.meshes.forEach(m => (m.visible = false));
   bearMug.rotation.set((MUG_TILT + BEAR_ARM_LIFT * bs - (0.5 + MUG_TILT) * smooth((bs - 0.6) / 0.4)), 0, 0);
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
-  bearYawn.visible = W.yawn > 0.05; bearMouthLine.visible = !bearYawn.visible;
-  bearYawn.scale.set(0.075 * (0.6 + 0.4 * W.yawn), 0.1 * W.yawn, 0.04);
-  const happy = (bs > 0.5 && W.cheer < 0.5) || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
+  // reading aloud: little mouth movements in bursts, like words
+  const talk = W.reading && W.pageT > 0.9 && W.pageT < 4.4 ? Math.max(0, Math.sin(t * 11)) * (0.5 + 0.5 * Math.sin(t * 2.3)) : 0;
+  bearYawn.visible = W.yawn > 0.05 || talk > 0.15; bearMouthLine.visible = !bearYawn.visible;
+  const mo = Math.max(W.yawn, 0.32 * talk);
+  bearYawn.scale.set(0.075 * (0.6 + 0.4 * mo), 0.1 * mo, 0.04);
+
+  // the book: appears from his lap, opens, and turns its pages
+  book.visible = W.bookOut > 0.01;
+  if (book.visible) {
+    book.scale.setScalar(0.3 + 0.7 * W.bookOut);
+    book.rotation.x = BEAR_ARM_LIFT * bs - 0.15;           // kept upright while his arms lift
+    const o = W.bookOpen;
+    bookL.rotation.y = 0.22 * o; bookR.rotation.y = -0.22 * o - Math.PI * (1 - o);   // closed = right half folded over
+    const k = W.page * 2;
+    bookL.userData.face.material.map = PAGES[(k + 1) % PAGES.length];
+    bookR.userData.face.material.map = PAGES[(k + 2) % PAGES.length];
+    const ft = W.reading ? smooth((W.pageT - 4.2) / 0.7) : 0;              // the last 0.8 s of each page: turn it
+    flip.visible = ft > 0 && ft < 1;
+    flip.rotation.y = -0.22 - (Math.PI - 0.44) * ft;
+    flipFront.material.map = PAGES[(k + 2) % PAGES.length]; flipBack.material.map = PAGES[(k + 3) % PAGES.length];
+    if (ft >= 1 - 1e-6) bookR.userData.face.material.map = PAGES[(k + 4) % PAGES.length];
+    for (const m of [bookL.userData.face.material, bookR.userData.face.material, flipFront.material, flipBack.material]) m.needsUpdate = true;
+  }
+  // a speech bubble with the picture he's describing
+  const bub = W.reading ? smooth(Math.min((W.pageT - 0.9) / 0.4, (4.3 - W.pageT) / 0.4)) : 0;
+  bubble.visible = bub > 0.01;
+  if (bubble.visible) {
+    bubble.material.map = BUBBLES[(W.page + 1) % BUBBLES.length];
+    bubble.position.set(-1.25, 2.5, 1.0);               // in the space above Nom, its tail pointing at Barry
+    const sz = 0.7 * (0.7 + 0.3 * bub); bubble.scale.set(sz, sz, sz); bubble.material.opacity = bub;
+  }
+  const happy = (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5) || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
   const sleepy = !happy && (zz > 0.5 || blinking(t, 4.7, 1));
   bearEyes.forEach(e => (e.visible = !happy && !sleepy));
   bearHappy.forEach(e => (e.visible = happy));
@@ -944,7 +1071,7 @@ function pose(t) {
   updateConfetti(W.bdayT);
   bearBody.updateMatrixWorld(true); alienBody.updateMatrixWorld(true);
   updateZs(bearZs, bearBody.localToWorld(_zp.set(0.8, 2.05, 0.6)), t, zz, 0.95);
-  updateZs(alienZs, alienBody.localToWorld(_zp.set(0.3, 1.45, 0.3)), t + 1.7, zz, 0.75);
+  updateZs(alienZs, alienBody.localToWorld(_zp.set(0.3, 1.45, 0.3)), t + 1.7, Math.max(zz, smooth((W.doze - 0.6) / 0.4)), 0.75);
 
   // Alien: sways, hops every 5 s, drinks every 7 s, blinks, glances over at the bear.
   let us = params.has('preview') ? sip(t, 7, 6.3) : sipAt(t, ALIEN_SIPS);
@@ -960,8 +1087,9 @@ function pose(t) {
     if (m.since < 3.6 && us === 0 && !afterSip) { mood = MOODS[m.i % MOODS.length]; moodT = m.since; }
   }
   if (mood === 'content') mood = null;
-  if (W.sleep > 0.05 || W.nomYawn > 0 || W.croc > 0 || W.toastTurn > 0) mood = null;
-  const cuddle = W.croc > 0.95 && W.sleep < 0.3;     // awake and hugging the crocodile
+  if (W.sleep > 0.05 || W.nomYawn > 0 || W.croc > 0 || W.toastTurn > 0 || W.bookOut > 0) mood = null;
+  const cuddle = W.croc > 0.95 && W.sleep < 0.3 && W.bookOut < 0.5;     // awake and hugging the crocodile
+  const nz = Math.max(zz, W.doze);                   // asleep, or dozing off during the story
   if (W.party > 0.3 || W.thanks > 0.3) { mood = 'giggle'; moodT = (W.thanks > 0.3 ? t : W.bdayT) % 3.6; }   // giggly on birthdays
   const ease = mood ? smooth(Math.min(moodT / 0.4, (3.6 - moodT) / 0.4)) : 0;   // fade in and out
 
@@ -974,13 +1102,13 @@ function pose(t) {
   if (mood === 'sleepy') tilt += 0.07 * ease * Math.sin(moodT * 1.2);   // slow, dozy sway
   if (cuddle) tilt += 0.09 * Math.sin(t * 2.2);              // rocking the crocodile side to side
   tilt -= 0.07 * W.toastTurn;                                  // leans in for a toast
-  alienBody.rotation.z = tilt * (1 - zz) - 0.17 * zz;   // asleep: leans over onto Barry
+  alienBody.rotation.z = tilt * (1 - nz) - 0.17 * nz;   // asleep: leans over onto Barry
   if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn;
   const nomTall = 1 + 0.06 * W.nomYawn;
   const nSquash = 1 - 0.09 * Math.sin(Math.PI * W.nMug);
   alienBody.scale.set(1 / Math.sqrt(nomTall * nSquash), nomTall * nSquash, 1);
   if (D.alienX === undefined) D.alienX = alien.position.x;
-  alien.position.x = D.alienX + 0.06 * zz;
+  alien.position.x = D.alienX + 0.06 * nz;
   // bending down for the mug, and turning round to fetch Greg from behind (or put him back)
   const reach = Math.sin(Math.PI * smooth(W.croc));
   alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach;
@@ -1028,15 +1156,16 @@ function pose(t) {
   const gp = t % 13, glance = !params.has('rest') && !mood && gp > 5 && gp < 7;
   const sipping = us > 0.5;
   const mmm = params.get('expr') === 'content' || (!mood && afterSip && sinceSip < 4.8);   // eyes stay happily closed just after a sip
-  const happyEyes = zz < 0.5 && ((sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
-  const sleepyEyes = zz > 0.5 || mood === 'sleepy' || (blink && !happyEyes);
+  const happyEyes = nz < 0.5 && ((sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
+  const sleepyEyes = nz > 0.5 || mood === 'sleepy' || (blink && !happyEyes);
   const wide = mood === 'curious' ? 1 + 0.15 * ease : 1;
   alienEyes.forEach(({ white, pupil, s, sleepy, happy }) => {
     white.visible = pupil.visible = !happyEyes && !sleepyEyes;
     happy.visible = happyEyes;
     sleepy.visible = sleepyEyes && !happyEyes;
     white.scale.set(EYE_R * wide, EYE_R * wide, 0.055);
-    if (watchingMouse() && W.sleep < 0.3) lookAtMouse(white, pupil);          // following your mouse pointer
+    if (W.bookOut > 0.5) placePupil(pupil, 0.08, -0.03);                      // looking at the pictures in the book
+    else if (watchingMouse() && W.sleep < 0.3) lookAtMouse(white, pupil);          // following your mouse pointer
     else if (mood === 'curious') placePupil(pupil, 0, 0.05);  // looking straight up, wondering
     else if (glance) placePupil(pupil, 0.09, 0.04);
     else placePupil(pupil, -s * 0.06, 0.035);                 // a bright, slightly upward gaze
@@ -1045,7 +1174,7 @@ function pose(t) {
   // mouth: closed while drinking and for a while after, a small "o" when curious, a smile when giggly or sleepy
   mouthO.scale.set(0.045 * (1 + 0.6 * W.nomYawn), 0.055 * (1 + 1.3 * W.nomYawn), 0.02);
   if (W.nomYawn > 0.05) setMouth('o');                       // a big yawn
-  else if (zz > 0.3 || cuddle) setMouth('smile');
+  else if (nz > 0.3 || cuddle || W.bookOut > 0.5) setMouth('smile');
   else if (mood === 'curious') setMouth('o');
   else if (mood === 'giggle' || mood === 'sleepy' || afterSip || us > 0.3 || params.get('expr') === 'content') setMouth('smile');
   else setMouth('open');

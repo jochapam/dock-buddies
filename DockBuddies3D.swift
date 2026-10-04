@@ -491,7 +491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // They do these by themselves now and then; this lets you ask for one.
         let doItem = menu.addItem(withTitle: "Ask Them To", action: nil, keyEquivalent: "")
         let doMenu = NSMenu()
-        for (title, name) in [("Make a Toast 🥂", "toast"), ("Cuddle Greg 🐊", "croc"), ("Have a Stretch", "stretch")] {
+        for (title, name) in [("Make a Toast 🥂", "toast"), ("Cuddle Greg 🐊", "croc"), ("Have a Stretch", "stretch"), ("Read a Story 📖", "story")] {
             let item = doMenu.addItem(withTitle: title, action: #selector(doActivity(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = name

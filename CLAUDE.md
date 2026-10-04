@@ -9,6 +9,6 @@
 - Release = bump `VERSION` and push to main. Installed apps self-update from the latest release.
 - Never put personal names or the birthday message in the repo; that lives in each Mac's Settings.
 - **Greg** is Nom's plush crocodile (green, cream jaw/belly, big grin with teeth, curly tail, wonky golden horns, small brown bow). Nom hugs him during the "croc" activity and while asleep.
-- Director activities (scene.js `ACTS`): toast, croc (Greg cuddle), stretch; plus waking up with a stretch and yawn. The app's ☕ > Ask Them To menu calls `window.doActivity(name)`.
-- Planned: story time, movie night.
+- Director activities (scene.js `ACTS`): toast, croc (Greg cuddle), stretch, story (Barry reads a picture book; favourite in the evening); plus waking up with a stretch and yawn. The app's ☕ > Ask Them To menu calls `window.doActivity(name)`.
+- Planned: movie night.
 - Stored meshes are used in sculpt order; anything sculpted after the stored set is sculpted live. So add new shapes at the END (after Greg), check with `scene/multi.py` (one page load, many states via `__params.set(...)`), then re-bake when final.
