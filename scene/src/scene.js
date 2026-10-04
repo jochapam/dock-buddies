@@ -292,6 +292,8 @@ function mug(r, h, parent) {
   const coffee = new THREE.Mesh(new THREE.CircleGeometry(r * 0.88, 48), M.coffee);
   coffee.rotation.x = -Math.PI / 2; coffee.position.y = h / 2 - 0.055;
   g.add(coffee);
+  // how full it is (1 = full): the coffee sinks as they drink, and rises again with a refill
+  g.userData.setLevel = (k) => { coffee.position.y = (-h / 2 + 0.05) + (h - 0.105) * k; coffee.scale.setScalar(0.97 + 0.03 * k); };
   const handle = new THREE.Mesh(new THREE.TorusGeometry(h * 0.27, r * 0.115, 16, 48, Math.PI * 1.3), M.ceramic);
   handle.rotation.z = -Math.PI * 0.65; handle.position.set(r * 0.95, 0.01, 0);
   g.add(handle);
@@ -657,17 +659,18 @@ const pot = new THREE.Group(); alienBody.add(pot);
   handle.position.set(-0.16, 0.0, 0); handle.rotation.z = Math.PI * 0.4; pot.add(handle);
   pot.userData.tip = new THREE.Object3D(); pot.userData.tip.position.set(0.255, 0.09, 0); pot.add(pot.userData.tip);
 }
-pot.visible = false;
+pot.visible = false; pot.scale.setScalar(1.35);
 const POT_HOLD = { p: [0.0, 0.6, 0.6], r: [0, 0, 0] }, POT_AWAY = { p: [-0.35, 0.2, -0.55], r: [0, 0.3, 0] };
-const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.012, 1, 8, 1, true), M.coffee);
+const stream = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshToonMaterial({ color: 0x5a3418, gradientMap: TOON_BANDS.cel }));
 stream.visible = false; scene.add(stream);
-const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
-function pourStream(from, to) {           // a thin stream of coffee from the spout into a mug
-  from.getWorldPosition(_s1); to.getWorldPosition(_s2); _s2.y += 0.02;
-  const d = _s2.clone().sub(_s1), len = d.length();
-  stream.position.copy(_s1).addScaledVector(d, 0.5);
-  stream.scale.set(1, len, 1);
-  stream.quaternion.setFromUnitVectors(_up, d.normalize());
+const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3();
+function pourStream(from, to, t) {        // a stream of coffee arcing from the spout into a mug
+  from.getWorldPosition(_s1); to.getWorldPosition(_s2); _s2.y -= 0.02;
+  const mid = _s1.clone().lerp(_s2, 0.5); mid.y += 0.05 + 0.06 * _s1.distanceTo(_s2);
+  const wob = 0.008 * Math.sin(t * 30);
+  const curve = new THREE.QuadraticBezierCurve3(_s1.clone(), mid.add(new THREE.Vector3(wob, 0, wob)), _s2.clone());
+  stream.geometry.dispose();
+  stream.geometry = new THREE.TubeGeometry(curve, 16, 0.024, 8, false);
   stream.visible = true;
 }
 
@@ -965,6 +968,7 @@ function direct(t) {
       const a = lastStart(t, ACT_TIMES);
       if (a.since < 0.1 && D.act === null) {
         D.act = ACTS[a.i % ACTS.length]; D.actStart = t;
+        if (Math.min(D.bLevel ?? 1, D.nLevel ?? 1) < 0.4) D.act = 'refill';   // running low: time for a top-up
         // in the evening, story time is the favourite (at most once an hour)
         const h = new Date().getHours();
         if ((h >= 19 || h < 5) && (D.lastStory === undefined || t - D.lastStory > 3600)) D.act = 'story';
@@ -1014,6 +1018,7 @@ function direct(t) {
   const pourBarry = refillT < 15 ? smooth(Math.min((refillT - 3.8) / 0.6, (6.6 - refillT) / 0.6)) : 0;
   const pourNom = refillT < 15 ? smooth(Math.min((refillT - 7.4) / 0.6, (9.8 - refillT) / 0.6)) : 0;
   const holdOut = refillT < 15 ? smooth(Math.min((refillT - 3.0) / 0.8, (7.4 - refillT) / 0.8)) : 0;   // Barry holds his mug out
+  const scoot = refillT < 15 ? smooth(Math.min((refillT - 3.0) / 0.7, (7.2 - refillT) / 0.7)) : 0;      // Nom shuffles over
 
   // waving hello when your pointer comes close (Nom first; Barry joins in if you stay)
   const near = mouseNear();
@@ -1033,7 +1038,7 @@ function direct(t) {
   return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
            stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
            toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze,
-           pot: D.pot || 0, pourBarry, pourNom, holdOut, waveN, waveB, waveT };
+           pot: D.pot || 0, pourBarry, pourNom, holdOut, scoot, waveN, waveB, waveT, dt };
 }
 const BDAY_LEN = 22;
 
@@ -1113,7 +1118,7 @@ function placeMug(mug, arms, hold, floorSpot, k) {
 }
 
 function pose(t) {
-  const W = direct(t);                         // what the director says is happening
+  const W = direct(t); window.__W = W;          // what the director says is happening
   const zz = smooth((W.sleep - 0.45) / 0.55);  // eyes closed / leaning: second half of falling asleep
   const bearDown = W.bMug, nomDown = W.nMug;   // 0 = mug in hand, 1 = on the floor (in between: bending to put it down / pick it up)
   // Bear: breathes; sips now and then; on birthdays he raises his mug for a toast.
@@ -1123,8 +1128,8 @@ function pose(t) {
   const tall = 1 + 0.045 * W.stretch;          // stretching up tall
   const bSquash = 1 - 0.09 * Math.sin(Math.PI * W.bMug);   // squashes down a little as he bends over
   bearBody.scale.set((1 + (breath - 1) * 0.5) / Math.sqrt(tall) / Math.sqrt(bSquash), breath * tall * bSquash, 1);
-  bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown) + 0.32 * W.holdOut;   // (leans in to have his mug filled)   // nods asleep, leans back to stretch, bends to reach the floor
-  bearBody.rotation.z = -0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
+  bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown) + 0.14 * W.holdOut;   // (leans in to have his mug filled)   // nods asleep, leans back to stretch, bends to reach the floor
+  bearBody.rotation.z = -0.025 * zz + 0.05 * W.toastTurn + 0.06 * W.holdOut + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
   if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * Math.max(W.toastTurn, W.holdOut);    // turns towards Nom for a toast or a refill
   pivotAbout(bearBody, BEAR_BEND_AT);
   bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
@@ -1141,6 +1146,9 @@ function pose(t) {
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
   // reading aloud: little mouth movements in bursts, like words
   const talk = W.reading && W.pageT > 0.9 && W.pageT < 4.4 ? Math.max(0, Math.sin(t * 11)) * (0.5 + 0.5 * Math.sin(t * 2.3)) : 0;
+  // coffee level: goes down a little with every sip, back up when Nom pours
+  D.bLevel = Math.min(1, Math.max(0.22, (D.bLevel ?? 1) - (bs > 0.9 && W.toastRaise === 0 ? W.dt * 0.05 : 0) + (W.pourBarry > 0.6 ? W.dt * 0.4 : 0)));
+  bearMug.userData.setLevel(D.bLevel);
   bearYawn.visible = W.yawn > 0.05 || talk > 0.15; bearMouthLine.visible = !bearYawn.visible;
   const mo = Math.max(W.yawn, 0.32 * talk);
   bearYawn.scale.set(0.075 * (0.6 + 0.4 * mo), 0.1 * mo, 0.04);
@@ -1257,6 +1265,7 @@ function pose(t) {
   alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach;
   alienBody.rotation.y = -1.25 * reach;
   pivotAbout(alienBody, NOM_BEND_AT);
+  alienBody.position.x += 0.42 * W.scoot; alienBody.position.z += 0.5 * W.scoot;               // shuffles over next to Barry to pour for him
   alienArms.rotation.x = -ALIEN_ARM_LIFT * us * (1 - nomDown);
   alienPoses.show(us);
   if (W.nomStretch > 0.06) {                    // arms up for a big yawn
@@ -1273,6 +1282,8 @@ function pose(t) {
   alienBody.updateMatrixWorld(true);
   placeMug(alienMug, alienArms, ALIEN_MUG_HOLD, nomFloor, nomDown);
 
+  D.nLevel = Math.min(1, Math.max(0.22, (D.nLevel ?? 1) - (us > 0.9 && W.toastRaise === 0 ? W.dt * 0.06 : 0) + (W.pourNom > 0.6 ? W.dt * 0.4 : 0)));
+  alienMug.userData.setLevel(D.nLevel);
   // the coffee pot: fetched from behind like Greg, then tipped to pour
   pot.visible = W.pot > 0.001;
   stream.visible = false;
@@ -1281,11 +1292,11 @@ function pose(t) {
     pot.position.set(...lerp3(POT_AWAY.p, POT_HOLD.p, k)); pot.position.y += Math.sin(Math.PI * k) * 0.15;
     const toNom = smooth(W.pourNom);                       // turns to pour into its own mug (in front, on the floor)
     pot.rotation.set(0, -Math.PI / 2 * toNom, -1.0 * Math.max(W.pourBarry, W.pourNom));
-    pot.position.y += 0.8 * W.pourBarry; pot.position.x += 0.22 * W.pourBarry; pot.position.z += 0.12 * toNom - 0.08 * W.pourBarry;
-    pot.position.y += 0.02 * toNom;
+    pot.position.y += 0.75 * W.pourBarry; pot.position.x += 0.35 * W.pourBarry; pot.position.z += 0.2 * toNom - 0.02 * W.pourBarry;
+    pot.position.y += 0.08 * toNom;
     alienBody.updateMatrixWorld(true);
-    if (W.pourBarry > 0.6) pourStream(pot.userData.tip, bearMug.userData.top);
-    if (W.pourNom > 0.6) pourStream(pot.userData.tip, alienMug.userData.top);
+    if (W.pourBarry > 0.6) pourStream(pot.userData.tip, bearMug.userData.top, t);
+    if (W.pourNom > 0.6) pourStream(pot.userData.tip, alienMug.userData.top, t);
   }
 
   // Greg: Nom turns round, picks him up from behind and turns back hugging him (and the reverse to put him away)
@@ -1351,6 +1362,7 @@ const outline = STYLE === 'toon' ? new OutlineEffect(renderer, { defaultThicknes
 function renderAt(t) { pose(t); (outline || renderer).render(scene, camera); }
 window.renderAt = renderAt;
 window.__params = params;   // (for test stills)
+window.__pose = pose; window.__D = D;       // (for stepping through time in tests without drawing)
 
 if (!params.has('preview')) {
   const start = performance.now();
