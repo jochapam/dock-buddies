@@ -7,6 +7,8 @@ import { gunzipSync } from 'fflate';
 // ---- Baking: sculpt once, store the meshes, and load them instantly next time ----
 const SCULPTED = [];            // every mesh sculpted this run, in order (for exporting)
 let BAKED = null, bakeIndex = 0;
+// ?bakelimit=N uses only the first N stored meshes and sculpts the rest live (for trying out new shapes)
+const BAKE_LIMIT = typeof location !== 'undefined' ? (+new URLSearchParams(location.search).get('bakelimit') || Infinity) : Infinity;
 if (typeof window !== 'undefined' && window.__BAKED_GZ) {
   const bin = atob(window.__BAKED_GZ), raw = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
@@ -141,7 +143,7 @@ export function lathe(profile, sx, sz) {
  * Adds per-vertex soft shading ("ao") that darkens creases where parts meet.
  */
 export function sculpt(sdf, bounds, step, armWeight, colorFn = null) {
-  if (BAKED && bakeIndex < BAKED.length) return BAKED[bakeIndex++];   // already sculpted and stored inside the app
+  if (BAKED && bakeIndex < Math.min(BAKED.length, BAKE_LIMIT)) return BAKED[bakeIndex++];   // already sculpted and stored inside the app
   if (BAKED) bakeIndex++;               // anything newer than the stored set is sculpted live
   const [[x0, y0, z0], [x1, y1, z1]] = bounds;
   const dims = [Math.ceil((x1 - x0) / step) + 1, Math.ceil((y1 - y0) / step) + 1, Math.ceil((z1 - z0) / step) + 1];
@@ -218,26 +220,30 @@ export function skinnedBody(geometry, material, pivot, parent) {
  * and show whichever pose is nearest. build(armsAt) gets a helper that evaluates the arm shapes in that pose.
  */
 export function poses(maxAngle, pivot, build, material, parent, count = 9, extras = []) {
-  // extras: additional poses {lift, spread, sx}: arms lifted forward by `lift`, then swung outwards
-  // by `spread` around the shoulders (at x = ±sx), e.g. for a big stretch
+  // extras: additional poses {lift, yaw, spread, sx}: arms lifted forward by `lift`, turned out to the
+  // sides by `yaw`, then swung up by `spread`, around the shoulders (at x = ±sx), e.g. for a big stretch
   const meshes = [];
   const p = new V();
   for (let k = 0; k < count + extras.length; k++) {
-    const e = k < count ? { lift: maxAngle * k / (count - 1), spread: 0, sx: 0 } : extras[k - count];
+    const e = k < count ? { lift: maxAngle * k / (count - 1), spread: 0, yaw: 0, sx: 0 } : { spread: 0, yaw: 0, ...extras[k - count] };
     const c = Math.cos(e.lift), sn = Math.sin(e.lift);
-    const cs = Math.cos(e.spread), ss = Math.sin(e.spread);
+    const cs = Math.cos(e.spread), ss = Math.sin(e.spread), cy = Math.cos(e.yaw), sy = Math.sin(e.yaw);
     // where a point on the moved arm sat in the resting pose
     const toRest = (x, y, z) => {
       if (e.spread) {                       // undo the outward swing (around this side's shoulder)
         const side = x < 0 ? -1 : 1, s = -side, ox = side * e.sx, dx = x - ox, dy = y - pivot[1];   // swings up and out
         x = ox + dx * cs + dy * ss * s; y = pivot[1] - dx * ss * s + dy * cs;
       }
+      if (e.yaw) {                          // undo the turn out to the side (around this side's shoulder)
+        const side = x < 0 ? -1 : 1, ox = side * e.sx, dx = x - ox, dz = z - pivot[2], sn2 = sy * side;
+        x = ox + dx * cy - dz * sn2; z = pivot[2] + dx * sn2 + dz * cy;
+      }
       const yy = y - pivot[1], zz = z - pivot[2];   // undo the forward lift
       return [x, pivot[1] + yy * c - zz * sn, pivot[2] + yy * sn + zz * c];
     };
     const armsAt = (arms, x, y, z) => {
       const r = toRest(x, y, z);
-      if (e.spread) return arms[x < 0 ? 0 : 1](r[0], r[1], r[2]);   // each side only swings its own arm
+      if (e.spread || e.yaw) return arms[x < 0 ? 0 : 1](r[0], r[1], r[2]);   // each side only swings its own arm
       let d = Infinity;
       for (const a of arms) d = Math.min(d, a(r[0], r[1], r[2]));
       return d;
