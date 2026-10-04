@@ -1,0 +1,60 @@
+name: Build and release
+
+# Every push to main builds the app on a Mac. When VERSION has a new number, the build is published
+# as a release, and every installed copy of Dock Buddies picks it up within a few hours.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Apple Silicon + Intel)
+        run: |
+          swiftc --version
+          # compile once with errors visible, then the normal universal build
+          swiftc -parse-as-library -target arm64-apple-macos12 DockBuddies3D.swift -o /tmp/check
+          bash build.sh
+          lipo -archs "Dock Buddies 3D.app/Contents/MacOS/DockBuddies3D"
+
+      - name: Package zip and disk image
+        run: |
+          echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+          ditto -c -k --keepParent "Dock Buddies 3D.app" Dock-Buddies-3D.zip
+          STAGE="$(mktemp -d)/Dock Buddies"
+          mkdir -p "$STAGE"
+          cp -R "Dock Buddies 3D.app" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          cat > "$STAGE/Read me first.txt" <<'TXT'
+          Dock Buddies 3D
+
+          1. Drag "Dock Buddies 3D" onto the Applications folder next to it.
+          2. Open it from Applications.
+
+          The first time, macOS may say it can't check the app because it isn't from the App Store.
+          If so: open System Settings > Privacy & Security, scroll down, and click "Open Anyway" next to Dock Buddies 3D.
+          You only need to do this once. After that it keeps itself up to date.
+
+          To have the buddies appear every time you log in: System Settings > General > Login Items > "+" and choose Dock Buddies 3D.
+          Use the ☕ in the menu bar for Settings, to hide them or to quit.
+          TXT
+          hdiutil create -volname "Dock Buddies" -srcfolder "$STAGE" -ov -format UDZO Dock-Buddies-3D.dmg
+
+      - name: Publish release (only when VERSION is new)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION is already released. Bump VERSION to publish a new one."
+            exit 0
+          fi
+          git log -1 --pretty=%B > notes.txt
+          gh release create "v$VERSION" Dock-Buddies-3D.zip Dock-Buddies-3D.dmg \
+            --title "Dock Buddies $VERSION" --notes-file notes.txt
