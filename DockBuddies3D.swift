@@ -11,6 +11,7 @@
 import AppKit
 import WebKit
 import SwiftUI
+import ServiceManagement
 
 /// The scene is drawn for a 460 × 340 frame; the window keeps that shape at every size.
 let aspect: CGFloat = 340.0 / 460.0
@@ -140,6 +141,11 @@ final class SettingsModel: ObservableObject {
     @Published var title: String { didSet { save() } }
     @Published var message: String { didSet { save() } }
     @Published var thanked: Bool
+    @Published var openAtLogin: Bool { didSet { if openAtLogin != oldValue { setOpenAtLogin(openAtLogin) } } }
+    @Published var loginNote = ""
+
+    /// Login items need macOS 13 or later; on macOS 12 the switch is hidden.
+    static var canOpenAtLogin: Bool { if #available(macOS 13.0, *) { return true } else { return false } }
 
     init(app: AppDelegate) {
         let d = UserDefaults.standard
@@ -153,6 +159,7 @@ final class SettingsModel: ObservableObject {
         title = d.string(forKey: Birthday.titleKey) ?? Birthday.defaultTitle
         message = d.string(forKey: Birthday.messageKey) ?? Birthday.defaultMessage
         thanked = d.bool(forKey: Birthday.thanksKey)
+        if #available(macOS 13.0, *) { openAtLogin = SMAppService.mainApp.status == .enabled } else { openAtLogin = false }
     }
 
     func save() {
@@ -167,6 +174,19 @@ final class SettingsModel: ObservableObject {
         app?.checkBirthday()
     }
 
+    func setOpenAtLogin(_ on: Bool) {
+        guard #available(macOS 13.0, *) else { return }
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            loginNote = SMAppService.mainApp.status == .requiresApproval
+                ? "Allow Dock Buddies in System Settings → General → Login Items." : ""
+        } catch {
+            loginNote = "Couldn't change this: \(error.localizedDescription)"
+            let actual = SMAppService.mainApp.status == .enabled
+            if actual != openAtLogin { openAtLogin = actual }
+        }
+    }
+
     func showAgainThisYear() {
         d.removeObject(forKey: Birthday.thanksKey)
         thanked = false
@@ -178,6 +198,20 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if SettingsModel.canOpenAtLogin {
+                GroupBox(label: Text("General").font(.headline)) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Open at login", isOn: $model.openAtLogin)
+                        if !model.loginNote.isEmpty {
+                            Text(model.loginNote).font(.caption).foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                }
+            }
+
             GroupBox(label: Text("Size").font(.headline)) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {

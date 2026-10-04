@@ -47,7 +47,7 @@ jobs:
           If so: open System Settings > Privacy & Security, scroll down, and click "Open Anyway" next to Dock Buddies 3D.
           You only need to do this once. After that it keeps itself up to date.
 
-          To have the buddies appear every time you log in: System Settings > General > Login Items > "+" and choose Dock Buddies 3D.
+          To have the buddies appear every time you log in: ☕ > Settings… > Open at login.
           Use the ☕ in the menu bar for Settings, to hide them or to quit.
           TXT
           hdiutil create -volname "Dock Buddies" -srcfolder "$STAGE" -ov -format UDZO Dock-Buddies-3D.dmg

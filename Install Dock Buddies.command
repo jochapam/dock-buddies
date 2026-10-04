@@ -35,13 +35,6 @@ xattr -dr com.apple.quarantine "$DEST/$APP_NAME.app" >/dev/null 2>&1
 touch "$DEST/$APP_NAME.app"   # nudge Finder to show the icon
 rm -rf "$WORK"
 
-# 3. Start at login?
-ANSWER=$(osascript -e "button returned of (display dialog \"Should the buddies appear automatically every time you log in?\" buttons {\"No\", \"Yes\"} default button 2 with title \"$APP_NAME\")" 2>/dev/null)
-if [ "$ANSWER" = "Yes" ]; then
-  osascript -e "tell application \"System Events\" to delete (every login item whose name is \"$APP_NAME\")" >/dev/null 2>&1
-  osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$DEST/$APP_NAME.app\", hidden:false}" >/dev/null 2>&1
-fi
-
-# 4. Open it.
+# 3. Open it.
 open "$DEST/$APP_NAME.app"
-say_box "All done! Barry and Nom are on your Dock. Use the ☕ in the menu bar for Settings, to hide them or to quit. They'll keep themselves up to date."
+say_box "All done! Barry and Nom are on your Dock. Use the ☕ in the menu bar for Settings (including Open at login), to hide them or to quit. They'll keep themselves up to date."
