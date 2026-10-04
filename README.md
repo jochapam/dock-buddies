@@ -14,7 +14,7 @@ curl -fsSL https://raw.githubusercontent.com/jochapam/dock-buddies/main/Install%
 
 Once installed, the app checks for new versions every few hours (or ☕ → Check for Updates…) and updates itself.
 
-Use the ☕ in the menu bar for Settings (open at login, size, position, birthday message), Move with Mouse, Hide and Quit. To remove it, run `Uninstall Dock Buddies.command`.
+Use the ☕ in the menu bar for Settings (open at login, size, screen and position, birthday message), Move with Mouse, Hide and Quit. To remove it, run `Uninstall Dock Buddies.command`.
 
 ## How it's made
 

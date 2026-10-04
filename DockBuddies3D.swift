@@ -128,6 +128,11 @@ enum Updates {
     }
 }
 
+struct ScreenChoice: Identifiable, Hashable {
+    let id: Int
+    let name: String
+}
+
 /// Everything the Settings window edits. Changes are saved straight away and applied live.
 @MainActor
 final class SettingsModel: ObservableObject {
@@ -143,6 +148,21 @@ final class SettingsModel: ObservableObject {
     @Published var thanked: Bool
     @Published var openAtLogin: Bool { didSet { if openAtLogin != oldValue { setOpenAtLogin(openAtLogin) } } }
     @Published var loginNote = ""
+    @Published var screenID: Int { didSet { if screenID != oldValue && !syncing { app?.moveToScreen(screenID) } } }
+    var syncing = false
+    @Published var onDock: Bool { didSet { d.set(onDock, forKey: AppDelegate.onDockKey); app?.reposition() } }
+    @Published var screens: [ScreenChoice] = []
+
+    func refreshScreens() {
+        screens = NSScreen.screens.enumerated().map { i, sc in
+            ScreenChoice(id: AppDelegate.displayID(sc), name: AppDelegate.screenName(sc, index: i))
+        }
+        if let app {                              // show where they actually are, without moving them
+            syncing = true
+            screenID = AppDelegate.displayID(app.targetScreen())
+            syncing = false
+        }
+    }
 
     /// Login items need macOS 13 or later; on macOS 12 the switch is hidden.
     static var canOpenAtLogin: Bool { if #available(macOS 13.0, *) { return true } else { return false } }
@@ -160,6 +180,9 @@ final class SettingsModel: ObservableObject {
         message = d.string(forKey: Birthday.messageKey) ?? Birthday.defaultMessage
         thanked = d.bool(forKey: Birthday.thanksKey)
         if #available(macOS 13.0, *) { openAtLogin = SMAppService.mainApp.status == .enabled } else { openAtLogin = false }
+        screenID = AppDelegate.displayID(app.targetScreen())
+        onDock = d.bool(forKey: AppDelegate.onDockKey)
+        refreshScreens()
     }
 
     func save() {
@@ -231,12 +254,23 @@ struct SettingsView: View {
             }
 
             GroupBox(label: Text("Position").font(.headline)) {
-                HStack {
-                    Button("◀ Nudge left") { model.app?.nudgeLeft() }
-                    Button("Back to centre") { model.app?.recentre() }
-                    Button("Nudge right ▶") { model.app?.nudgeRight() }
+                VStack(alignment: .leading, spacing: 10) {
+                    if model.screens.count > 1 {
+                        Picker("Screen", selection: $model.screenID) {
+                            ForEach(model.screens) { sc in Text(sc.name).tag(sc.id) }
+                        }
+                    }
+                    HStack {
+                        Button("◀ Nudge left") { model.app?.nudgeLeft() }
+                        Button("Back to corner") { model.app?.recentre() }
+                        Button("Nudge right ▶") { model.app?.nudgeRight() }
+                    }
+                    .frame(maxWidth: .infinity)
+                    Toggle("Sit at Dock height (when they're over the Dock)", isOn: $model.onDock)
+                    Text("They start in the bottom-right corner. You can also drag them along, or onto another screen, with ☕ > Move with Mouse.")
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity)
                 .padding(8)
             }
 
@@ -301,6 +335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var birthdayItem: NSMenuItem!
     var settingsWindow: NSWindow?
     var settingsModel: SettingsModel?
+    var nextScreenItem: NSMenuItem!
     var updating = false
     var card: CardPanel?
     var cardTimer: Timer?
@@ -308,7 +343,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var hatsOn: Bool?
     var width: CGFloat = 300
 
-    let offsetKey = "DockBuddies3DXOffset"
+    let fromRightKey = "DockBuddies3DFromRight"        // distance from the screen's bottom-right corner
+    static let screenKey = "DockBuddies3DScreen", onDockKey = "DockBuddies3DOnDock"
+    let cornerMargin: CGFloat = 12
     let widthKey = "DockBuddies3DWidth"
     static let minWidth: Double = 150, maxWidth: Double = 600, defaultWidth: Double = 300
 
@@ -339,18 +376,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         webView.frame = dragView.bounds
         dragView.addSubview(webView)
         dragView.onDrag = { [weak self] dx in
-            guard let self, let screen = self.panel.screen ?? NSScreen.main else { return }
+            guard let self else { return }
             if dx == 0 { return }
+            // can be dragged across onto a screen beside this one
+            let all = NSScreen.screens.reduce(NSRect.null) { $0.union($1.frame) }
             var f = self.panel.frame
-            f.origin.x = min(max(self.dragStartX + dx, screen.frame.minX), screen.frame.maxX - f.width)
+            f.origin.x = min(max(self.dragStartX + dx, all.minX), all.maxX - f.width)
+            if let here = NSScreen.screens.first(where: { $0.frame.minX <= f.midX && f.midX < $0.frame.maxX }) {
+                f.origin.y = self.baseY(on: here, height: f.height)       // follow the bottom of whichever screen they're over
+            }
             self.panel.setFrameOrigin(f.origin)
         }
         dragView.onDrop = { [weak self] in
-            guard let self, let screen = NSScreen.screens.first else { return }
-            // remember where they were left, relative to the centre of the screen
-            let centredX = screen.frame.midX - self.panel.frame.width / 2
-            UserDefaults.standard.set(Double(self.panel.frame.minX - centredX), forKey: self.offsetKey)
-            self.dragStartX = self.panel.frame.minX
+            guard let self else { return }
+            // remember which screen they were left on, and how far from its bottom-right corner
+            let f = self.panel.frame
+            let screen = NSScreen.screens.first(where: { $0.frame.minX <= f.midX && f.midX < $0.frame.maxX }) ?? self.targetScreen()
+            UserDefaults.standard.set(AppDelegate.displayID(screen), forKey: AppDelegate.screenKey)
+            UserDefaults.standard.set(Double(max(0, screen.frame.maxX - self.cornerMargin - f.maxX)), forKey: self.fromRightKey)
+            self.reposition()
+            self.settingsModel?.refreshScreens()
         }
         panel.contentView = dragView
 
@@ -378,15 +423,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func panelSize() -> NSSize { NSSize(width: width, height: (width * aspect).rounded()) }
 
-    /// Sit the pair on top of the Dock (or on the bottom edge if the Dock is hidden or on the side).
+    // MARK: Where they sit
+
+    static func displayID(_ screen: NSScreen) -> Int {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue ?? 0
+    }
+
+    static func screenName(_ screen: NSScreen, index: Int) -> String {
+        var name = "Screen \(index + 1)"
+        if #available(macOS 10.15, *) { name = screen.localizedName }
+        return index == 0 ? name + " (main)" : name
+    }
+
+    /// The screen they live on: the one chosen in Settings, or the main screen if that one isn't connected.
+    func targetScreen() -> NSScreen {
+        let id = UserDefaults.standard.integer(forKey: AppDelegate.screenKey)
+        return NSScreen.screens.first(where: { AppDelegate.displayID($0) == id }) ?? NSScreen.screens.first ?? NSScreen.main!
+    }
+
+    /// Feet on the bottom edge of the screen, or on top of the Dock if that's switched on and the Dock is at the bottom.
+    func baseY(on screen: NSScreen, height: CGFloat) -> CGFloat {
+        let dockAtBottom = screen.visibleFrame.minY > screen.frame.minY + 1
+        let floor = UserDefaults.standard.bool(forKey: AppDelegate.onDockKey) && dockAtBottom ? screen.visibleFrame.minY + 4 : screen.frame.minY + 2
+        return floor - height * footGap
+    }
+
+    /// Bottom-right corner of their screen (moved left by any nudges or dragging).
     @objc func reposition() {
-        guard let screen = NSScreen.screens.first else { return }
+        let screen = targetScreen()
         let size = panelSize()
-        let dockTop = screen.visibleFrame.minY
-        let offset = CGFloat(UserDefaults.standard.double(forKey: offsetKey))
-        let x = screen.frame.midX - size.width / 2 + offset
-        panel.setFrame(NSRect(x: x, y: dockTop - size.height * footGap + 4, width: size.width, height: size.height), display: true)
+        let fromRight = CGFloat(UserDefaults.standard.double(forKey: fromRightKey))
+        var x = screen.frame.maxX - cornerMargin - size.width - fromRight
+        x = min(max(x, screen.frame.minX), screen.frame.maxX - size.width)
+        panel.setFrame(NSRect(x: x, y: baseY(on: screen, height: size.height), width: size.width, height: size.height), display: true)
         dragStartX = panel.frame.minX
+        card?.setFrameOrigin(NSPoint(x: min(max(panel.frame.midX - (card?.frame.width ?? 0) / 2, screen.frame.minX + 8),
+                                            screen.frame.maxX - (card?.frame.width ?? 0) - 8), y: panel.frame.maxY + 4))
+    }
+
+    func moveToScreen(_ id: Int) {
+        UserDefaults.standard.set(id, forKey: AppDelegate.screenKey)
+        UserDefaults.standard.set(0, forKey: fromRightKey)      // start in that screen's corner
+        reposition()
+    }
+
+    @objc func nextScreen() {
+        let screens = NSScreen.screens
+        guard screens.count > 1, let i = screens.firstIndex(of: targetScreen()) else { return }
+        moveToScreen(AppDelegate.displayID(screens[(i + 1) % screens.count]))
+        settingsModel?.refreshScreens()
     }
 
     func setUpMenuBarItem() {
@@ -396,7 +481,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Nudge Left", action: #selector(nudgeLeft), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Nudge Right", action: #selector(nudgeRight), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Back to Centre", action: #selector(recentre), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Back to Corner", action: #selector(recentre), keyEquivalent: "").target = self
+        nextScreenItem = menu.addItem(withTitle: "Move to Next Screen", action: #selector(nextScreen), keyEquivalent: "")
+        nextScreenItem.target = self
         menu.addItem(.separator())
         moveItem = menu.addItem(withTitle: "Move with Mouse", action: #selector(toggleMoveMode), keyEquivalent: "")
         moveItem.target = self
@@ -428,6 +515,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         let option = NSEvent.modifierFlags.contains(.option)
         birthdayItem.isHidden = !(isBirthdayToday() || (option && Birthday.load() != nil))
+        nextScreenItem.isHidden = NSScreen.screens.count < 2
     }
 
     func setWidth(_ w: CGFloat) {
@@ -448,20 +536,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             w.center()
             settingsWindow = w
         }
+        settingsModel?.refreshScreens()
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     func shift(by dx: Double) {
         let d = UserDefaults.standard
-        d.set(d.double(forKey: offsetKey) + dx, forKey: offsetKey)
+        let maxShift = Double(targetScreen().frame.width - panelSize().width - cornerMargin)
+        d.set(min(max(0, d.double(forKey: fromRightKey) - dx), maxShift), forKey: fromRightKey)
         reposition()
     }
 
     @objc func nudgeLeft() { shift(by: -80) }
     @objc func nudgeRight() { shift(by: 80) }
-    @objc func recentre() {
-        UserDefaults.standard.set(0, forKey: offsetKey)
+    @objc func recentre() {                        // back to the bottom-right corner
+        UserDefaults.standard.set(0, forKey: fromRightKey)
         reposition()
     }
 
