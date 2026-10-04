@@ -230,6 +230,7 @@ export function poses(maxAngle, pivot, build, material, parent, count = 9, extra
     const cs = Math.cos(e.spread), ss = Math.sin(e.spread), cy = Math.cos(e.yaw), sy = Math.sin(e.yaw);
     // where a point on the moved arm sat in the resting pose
     const toRest = (x, y, z) => {
+      if (e.only && (x < 0 ? -1 : 1) !== e.only) return [x, y, z];   // one-armed pose: the other arm stays put
       if (e.spread) {                       // undo the outward swing (around this side's shoulder)
         const side = x < 0 ? -1 : 1, s = -side, ox = side * e.sx, dx = x - ox, dy = y - pivot[1];   // swings up and out
         x = ox + dx * cs + dy * ss * s; y = pivot[1] - dx * ss * s + dy * cs;
@@ -243,12 +244,12 @@ export function poses(maxAngle, pivot, build, material, parent, count = 9, extra
     };
     const armsAt = (arms, x, y, z) => {
       const r = toRest(x, y, z);
-      if (e.spread || e.yaw) return arms[x < 0 ? 0 : 1](r[0], r[1], r[2]);   // each side only swings its own arm
+      if (e.spread || e.yaw || e.only) return arms[x < 0 ? 0 : 1](r[0], r[1], r[2]);   // each side only swings its own arm
       let d = Infinity;
       for (const a of arms) d = Math.min(d, a(r[0], r[1], r[2]));
       return d;
     };
-    const mesh = new THREE.Mesh(build(armsAt, toRest, k >= count), material);
+    const mesh = new THREE.Mesh(build(armsAt, toRest, k >= count ? e : null), material);
     mesh.visible = k === 0;
     parent.add(mesh);
     meshes.push(mesh);

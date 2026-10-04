@@ -330,6 +330,8 @@ bear.add(bearBody);
 const BEAR_PIVOT = [0, 1.46, 0.12];   // the arms swing from the shoulders when he drinks
 const BEAR_ARM_LIFT = 0.75;          // how far (radians) the arms swing up to drink
 // a good-morning stretch: arms out to the sides
+// waving hello with his outside arm (two poses to swing between)
+const BEAR_WAVE = [[0.9, 1.15, -0.55], [0.9, 0.8, -0.8]].map(([lift, yaw, spread]) => ({ lift, yaw, spread, sx: 0.9, only: 1 }));
 const BEAR_STRETCH = [[0.3, 0.25], [0.55, 0.6], [0.8, 0.95], [0.95, 1.25]].map(([lift, yaw]) => ({ lift, yaw, sx: 0.9 }));   // arms out to the sides
 const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting on top of the fur
 {
@@ -388,7 +390,7 @@ const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting 
       const rest = S.smin(S.smin(S.smin(b, min2(ears, x, y, z), 0.07), tail(x, y, z), 0.06), min2(feet, x, y, z), 0.14);
       // the arm melts into his body along its whole length (no seam), easing off near the paw so it stays round
       let k;
-      if (stretch) {   // arms up and away from the body: melt in only at the shoulder
+      if (stretch && !(stretch.only && (x < 0 ? -1 : 1) !== stretch.only)) {   // arms up and away from the body: melt in only at the shoulder
         const r = toRest(x, y, z), toShoulder = Math.hypot(Math.abs(r[0]) - 0.96, r[1] - 1.46, r[2] - 0.11);
         k = 0.14 * Math.min(Math.max(1 - (toShoulder - 0.2) / 0.3, 0), 1);
       } else {
@@ -405,6 +407,7 @@ const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting 
   var bearPoses = S.poses(BEAR_ARM_LIFT, BEAR_PIVOT, bearBuild, bearMat, bearBody);
   // the stretch poses are sculpted after everything else (see the end of the characters)
   var makeBearStretch = () => S.poses(0, BEAR_PIVOT, bearBuild, bearMat, bearBody, 0, BEAR_STRETCH);
+  var makeBearWave = () => S.poses(0, BEAR_PIVOT, bearBuild, bearMat, bearBody, 0, BEAR_WAVE);
   addFuzz(bearPoses, 0xffffff, 0.055, 210, true);
 }
 // Face, placed on the surface: eyes fairly high and wide, a round cream snout just below.
@@ -450,6 +453,7 @@ alien.add(alienBody);
 // One soft body: tube ears, feet and arms all melt smoothly into it.
 const ALI_PIVOT = [0, 0.84, 0.05];   // the arms swing from here when it drinks
 const ALIEN_ARM_LIFT = 0.8;   // enough to bring the mug up to its mouth
+const NOM_WAVE = [[2.0, 0.25], [2.0, 0.75]].map(([lift, spread]) => ({ lift, spread, sx: 0.5, only: -1 }));   // waving with its outside arm
 const NOM_STRETCH = [[0.5, 0.2], [1.0, 0.45], [1.4, 0.65], [1.7, 0.8]].map(([lift, spread]) => ({ lift, spread, sx: 0.5 }));   // arms up beside its head
 {
   const body = S.lathe([[0, 0], [0.52, 0.0], [0.64, 0.08], [0.69, 0.3], [0.7, 0.58], [0.69, 0.8], [0.647, 1.106], [0.55, 1.292], [0.4, 1.439], [0.233, 1.526], [0.071, 1.563], [0, 1.566]], 1, 0.5);   // soft round dome; slim front-to-back, like a cushion
@@ -477,7 +481,7 @@ const NOM_STRETCH = [[0.5, 0.2], [1.0, 0.45], [1.4, 0.65], [1.7, 0.8]].map(([lif
       const withFeet = S.smin(S.smin(b, min2(ears, x, y, z), 0.07), min2(feet, x, y, z), 0.09);
       // the arm melts into the body along its whole length, easing off near the paw so it stays round
       let k;
-      if (stretch) {   // arms up: melt in only at the shoulder
+      if (stretch && !(stretch.only && (x < 0 ? -1 : 1) !== stretch.only)) {   // arms up: melt in only at the shoulder
         const r = toRest(x, y, z), toShoulder = Math.hypot(Math.abs(r[0]) - 0.5, r[1] - 0.84, r[2] - 0.05);
         k = 0.09 * Math.min(Math.max(1 - (toShoulder - 0.1) / 0.18, 0), 1);
       } else {
@@ -493,6 +497,7 @@ const NOM_STRETCH = [[0.5, 0.2], [1.0, 0.45], [1.4, 0.65], [1.7, 0.8]].map(([lif
   const alienMat = plushMaterial(C.alien, 0, true);
   var alienPoses = S.poses(ALIEN_ARM_LIFT, ALI_PIVOT, alienBuild, alienMat, alienBody);
   var makeNomStretch = () => S.poses(0, ALI_PIVOT, alienBuild, alienMat, alienBody, 0, NOM_STRETCH);
+  var makeNomWave = () => S.poses(0, ALI_PIVOT, alienBuild, alienMat, alienBody, 0, NOM_WAVE);
   addFuzz(alienPoses, C.alien, 0.045, 230, false);
 }
 
@@ -634,6 +639,82 @@ alienBody.add(croc);
 croc.visible = false;
 const nomStretch = makeNomStretch();          // sculpted after Greg, so the stored order stays the same
 nomStretch.meshes.forEach(m => (m.visible = false));
+const nomWave = makeNomWave(), bearWave = makeBearWave();   // waving hello (sculpted last)
+nomWave.meshes.forEach(m => (m.visible = false)); bearWave.meshes.forEach(m => (m.visible = false));
+
+// =====================================================================
+// Coffee pot for refills (plain geometry)
+// =====================================================================
+const pot = new THREE.Group(); alienBody.add(pot);
+{
+  const enamel = new THREE.MeshToonMaterial({ color: 0x5cc6c9, gradientMap: TOON_BANDS.cel });
+  const prof = [[0, -0.13], [0.11, -0.13], [0.15, -0.08], [0.16, 0.0], [0.14, 0.08], [0.1, 0.12], [0.11, 0.135], [0, 0.135]].map(([x, y]) => new THREE.Vector2(x, y));
+  pot.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 40), enamel));
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.03, 16, 12), M.ceramic); knob.position.y = 0.16; pot.add(knob);
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.034, 0.18, 14), enamel);
+  spout.position.set(0.18, 0.03, 0); spout.rotation.z = -0.95; pot.add(spout);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.016, 10, 24, Math.PI * 1.2), enamel);
+  handle.position.set(-0.16, 0.0, 0); handle.rotation.z = Math.PI * 0.4; pot.add(handle);
+  pot.userData.tip = new THREE.Object3D(); pot.userData.tip.position.set(0.255, 0.09, 0); pot.add(pot.userData.tip);
+}
+pot.visible = false;
+const POT_HOLD = { p: [0.0, 0.6, 0.6], r: [0, 0, 0] }, POT_AWAY = { p: [-0.35, 0.2, -0.55], r: [0, 0.3, 0] };
+const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.012, 1, 8, 1, true), M.coffee);
+stream.visible = false; scene.add(stream);
+const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+function pourStream(from, to) {           // a thin stream of coffee from the spout into a mug
+  from.getWorldPosition(_s1); to.getWorldPosition(_s2); _s2.y += 0.02;
+  const d = _s2.clone().sub(_s1), len = d.length();
+  stream.position.copy(_s1).addScaledVector(d, 0.5);
+  stream.scale.set(1, len, 1);
+  stream.quaternion.setFromUnitVectors(_up, d.normalize());
+  stream.visible = true;
+}
+
+// =====================================================================
+// Halloween: a jack-o'-lantern for the last week of October (glowing after dark), and bats on the 31st
+// =====================================================================
+const pumpkin = new THREE.Group(); scene.add(pumpkin);
+pumpkin.position.set(1.18, 0, 1.55); pumpkin.rotation.y = -0.35;
+const pumpkinGlow = new THREE.MeshBasicMaterial({ color: 0xffc94a }), pumpkinDark = new THREE.MeshBasicMaterial({ color: 0x3a2410 });
+const pumpkinFace = [];
+{
+  const g = new THREE.SphereGeometry(0.3, 48, 32), pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {        // ribbed and a little squashed
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), a = Math.atan2(z, x);
+    const r = 0.93 + 0.07 * Math.abs(Math.cos(a * 4));
+    pos.setXYZ(i, x * r, y * 0.78, z * r);
+  }
+  g.computeVertexNormals();
+  const body = new THREE.Mesh(g, new THREE.MeshToonMaterial({ color: 0xf28c28, gradientMap: TOON_BANDS.cel }));
+  body.position.y = 0.235; pumpkin.add(body);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.11, 10), new THREE.MeshToonMaterial({ color: 0x6b5a2e, gradientMap: TOON_BANDS.cel }));
+  stem.position.y = 0.5; stem.rotation.z = 0.25; pumpkin.add(stem);
+  const tri = (pts) => { const sh = new THREE.Shape(); sh.moveTo(...pts[0]); for (const q of pts.slice(1)) sh.lineTo(...q); return new THREE.ShapeGeometry(sh); };
+  const parts = [tri([[-0.15, 0.06], [-0.05, 0.06], [-0.1, 0.15]]), tri([[0.05, 0.06], [0.15, 0.06], [0.1, 0.15]]),
+                 tri([[-0.03, 0.0], [0.03, 0.0], [0, 0.05]]),
+                 tri([[-0.17, -0.04], [0.17, -0.04], [0.12, -0.1], [0.07, -0.07], [0.02, -0.11], [-0.03, -0.07], [-0.08, -0.11], [-0.12, -0.08]])];
+  for (const geo of parts) { const m = new THREE.Mesh(geo, pumpkinDark); m.position.set(0, 0.25, 0.288); pumpkin.add(m); pumpkinFace.push(m); }
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTexEarly(), color: 0xffa940, transparent: true, depthWrite: false, opacity: 0 }));
+  glow.position.set(0, 0.26, 0.4); glow.scale.set(0.9, 0.7, 1); pumpkin.add(glow); pumpkin.userData.glow = glow;
+}
+function puffTexEarly() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'); const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,0.8)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+}
+pumpkin.visible = false;
+const batMat = new THREE.MeshBasicMaterial({ color: 0x2b2233, side: THREE.DoubleSide });
+const bats = [0, 1].map(() => {
+  const b = new THREE.Group();
+  b.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), batMat));
+  for (const s of [-1, 1]) {
+    const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(s * 0.16, 0.06); sh.lineTo(s * 0.13, -0.01); sh.lineTo(s * 0.1, 0.02); sh.lineTo(s * 0.06, -0.03); sh.lineTo(0, 0);
+    const w = new THREE.Mesh(new THREE.ShapeGeometry(sh), batMat); b.add(w); b.userData[s] = w;
+  }
+  b.visible = false; scene.add(b); return b;
+});
 
 // =====================================================================
 // Story time: a picture book Barry holds open towards Nom, and little pictures in a speech bubble
@@ -803,6 +884,9 @@ let mouse = null, mouseMovedAt = -1e9;
 window.setMouse = (x, y) => { mouse = { x, y: window.innerHeight - y }; mouseMovedAt = performance.now(); };
 if (params.has('mouse')) { const [mx, my] = params.get('mouse').split(',').map(Number); mouse = { x: mx, y: my }; mouseMovedAt = 1e15; }
 const watchingMouse = () => mouse && performance.now() - mouseMovedAt < 10000;   // stops after 10 s without movement
+/** the pointer is right by them (just above or beside the window) */
+const mouseNear = () => watchingMouse() && performance.now() - mouseMovedAt < 1500 &&
+  mouse.x > -50 && mouse.x < window.innerWidth + 50 && mouse.y > -70 && mouse.y < window.innerHeight + 10;
 const _eyePos = new THREE.Vector3();
 function lookAtMouse(white, pupil) {
   camera.updateMatrixWorld();
@@ -831,10 +915,10 @@ const D = { sleep: params.has('preview') || params.has('rest') ? 0 : 1,   // the
             deep: !(params.has('preview') || params.has('rest')), wakeStart: null,
             bMug: params.has('preview') || params.has('rest') ? 0 : 1, nMug: params.has('preview') || params.has('rest') ? 0 : 1,   // mugs on the floor (0 = in hand)
             croc: params.has('preview') || params.has('rest') ? 0 : 1,   // Nom wakes up holding Greg
-            pendingAct: null, actStart: null, act: null };
+            pendingAct: null, actStart: null, act: null, pot: 0, waveStart: null, lastWave: -1e9, wasNear: false, barryJoin: false };
 // Little things they do now and then while awake (one every 4-8 minutes), in this order.
-const ACTS = ['toast', 'croc', 'story', 'stretch', 'toast', 'croc', 'toast', 'story', 'stretch'];
-const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48 };
+const ACTS = ['toast', 'croc', 'refill', 'story', 'stretch', 'toast', 'croc', 'refill', 'toast', 'story', 'stretch'];
+const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 15 };
 const MUG_MOVE = 1.6;    // seconds to bend down and put a mug on the floor (or pick it up)
 const ACT_TIMES = sipSchedule(13579, 150, 240, 480);
 window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; };
@@ -896,13 +980,17 @@ function direct(t) {
   // mugs: put down (bending over) before sleeping, stretching or cuddling Greg; picked up again afterwards
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
   const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2);
-  const nomWants = bearWants || wantCroc || D.croc > 0;
+  const wantPot = act === 'refill' && actT < ACT_LEN.refill - MUG_MOVE - 1.8;
+  const nomWants = bearWants || wantCroc || D.croc > 0 || wantPot || D.pot > 0;
   const step = (v, up) => up ? Math.min(1, v + dt / MUG_MOVE) : Math.max(0, v - dt / MUG_MOVE);
   if (params.has('mug')) D.bMug = D.nMug = +params.get('mug');
   else { D.bMug = step(D.bMug, bearWants); D.nMug = step(D.nMug, nomWants); }
   if (params.has('croc')) { D.nMug = 1; D.croc = +params.get('croc'); }
   else if (wantCroc && D.nMug >= 1) D.croc = Math.min(1, D.croc + dt / 1.6);       // reaches round and brings Greg out
   else if (!wantCroc) D.croc = Math.max(0, D.croc - dt / 1.6);                      // and puts him back
+  if (params.has('pot')) { D.pot = +params.get('pot'); D.nMug = 1; }
+  else if (wantPot && D.nMug >= 1) D.pot = Math.min(1, (D.pot || 0) + dt / 1.6);       // the coffee pot, fetched the same way
+  else if (!wantPot) D.pot = Math.max(0, (D.pot || 0) - dt / 1.6);
 
   // the stretch: Barry's arms go up 0.8-2 s, stay till 3.8 s, come down by 4.8 s; mugs back up by 6.5 s
   const stretch = wakeT < 6.5 ? smooth(Math.min((wakeT - 0.8) / 1.2, (4.8 - wakeT) / 1.0)) : 0;
@@ -921,6 +1009,22 @@ function direct(t) {
   const page = reading ? Math.floor((storyT - 4) / 5) : 0, pageT = reading ? ((storyT - 4) % 5) : 0;
   const doze = storyT < ACT_LEN.story ? smooth(Math.min((storyT - 26) / 8, (BOOK_OFF + 1.5 - storyT) / 1.5)) : 0;
 
+  // refill: mug down (0-1.6 s), fetch the pot (to 3.2 s), pour for Barry (4-6.5 s), then into its own mug (7.5-9.5 s)
+  const refillT = act === 'refill' ? actT : Infinity;
+  const pourBarry = refillT < 15 ? smooth(Math.min((refillT - 3.8) / 0.6, (6.6 - refillT) / 0.6)) : 0;
+  const pourNom = refillT < 15 ? smooth(Math.min((refillT - 7.4) / 0.6, (9.8 - refillT) / 0.6)) : 0;
+  const holdOut = refillT < 15 ? smooth(Math.min((refillT - 3.0) / 0.8, (7.4 - refillT) / 0.8)) : 0;   // Barry holds his mug out
+
+  // waving hello when your pointer comes close (Nom first; Barry joins in if you stay)
+  const near = mouseNear();
+  const idle = !act && D.sleep < 0.01 && D.bMug === 0 && D.nMug === 0 && wakeT > 7 && bdayT === Infinity;
+  if (near && !D.wasNear && idle && t - D.lastWave > 40) { D.waveStart = t; D.lastWave = t; D.barryJoin = false; }
+  D.wasNear = near;
+  let waveT = params.has('wave') ? +params.get('wave') : (D.waveStart === null ? Infinity : t - D.waveStart);
+  if (waveT > 1.2 && waveT < 1.3 && near) D.barryJoin = true;
+  const waveN = waveT < 3.2 ? smooth(Math.min(waveT / 0.35, (3.2 - waveT) / 0.35)) : 0;
+  const waveB = (D.barryJoin || params.has('wave')) && waveT < 4.2 ? smooth(Math.min((waveT - 1.2) / 0.4, (4.2 - waveT) / 0.4)) : 0;
+
   const toastT = act === 'toast' ? actT : Infinity;
   const toastTurn = toastT < 5 ? smooth(Math.min(toastT / 1.0, (5 - toastT) / 1.0)) : 0;
   const toastRaise = toastT < 5 ? Math.max(0.5 * smooth(Math.min((toastT - 0.4) / 0.8, (4.2 - toastT) / 0.6)),
@@ -928,7 +1032,8 @@ function direct(t) {
   const clink = toastT < 5 ? Math.max(0, 1 - Math.abs(toastT - 1.6) / 0.35) : 0;
   return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
            stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
-           toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze };
+           toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze,
+           pot: D.pot || 0, pourBarry, pourNom, holdOut, waveN, waveB, waveT };
 }
 const BDAY_LEN = 22;
 
@@ -1018,9 +1123,9 @@ function pose(t) {
   const tall = 1 + 0.045 * W.stretch;          // stretching up tall
   const bSquash = 1 - 0.09 * Math.sin(Math.PI * W.bMug);   // squashes down a little as he bends over
   bearBody.scale.set((1 + (breath - 1) * 0.5) / Math.sqrt(tall) / Math.sqrt(bSquash), breath * tall * bSquash, 1);
-  bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown);   // nods asleep, leans back to stretch, bends to reach the floor
+  bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown) + 0.32 * W.holdOut;   // (leans in to have his mug filled)   // nods asleep, leans back to stretch, bends to reach the floor
   bearBody.rotation.z = -0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
-  if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn;    // turns towards Nom for a toast
+  if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * Math.max(W.toastTurn, W.holdOut);    // turns towards Nom for a toast or a refill
   pivotAbout(bearBody, BEAR_BEND_AT);
   bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
   bearPoses.show(bs);
@@ -1028,6 +1133,10 @@ function pose(t) {
     bearPoses.meshes.forEach(m => (m.visible = false));
     bearStretch.showExtra(Math.min(BEAR_STRETCH.length - 1, Math.round(W.stretch * BEAR_STRETCH.length - 0.5)));
   } else bearStretch.meshes.forEach(m => (m.visible = false));
+  if (W.waveB > 0.06 && W.stretch <= 0.06) {          // waving hello
+    bearPoses.meshes.forEach(m => (m.visible = false));
+    bearWave.showExtra(Math.floor(W.waveT * 4) % 2);
+  } else bearWave.meshes.forEach(m => (m.visible = false));
   bearMug.rotation.set((MUG_TILT + BEAR_ARM_LIFT * bs - (0.5 + MUG_TILT) * smooth((bs - 0.6) / 0.4)), 0, 0);
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
   // reading aloud: little mouth movements in bursts, like words
@@ -1061,13 +1170,46 @@ function pose(t) {
     bubble.position.set(-1.25, 2.5, 1.0);               // in the space above Nom, its tail pointing at Barry
     const sz = 0.7 * (0.7 + 0.3 * bub); bubble.scale.set(sz, sz, sz); bubble.material.opacity = bub;
   }
-  const happy = (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5) || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
+  const happy = (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5 && W.holdOut < 0.5) || W.waveB > 0.5 || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
   const sleepy = !happy && (zz > 0.5 || blinking(t, 4.7, 1));
-  bearEyes.forEach(e => (e.visible = !happy && !sleepy));
+  bearEyes.forEach((e, i) => {
+    e.visible = !happy && !sleepy;
+    // his eyes follow your pointer too (a small shift on his face)
+    let ox = 0, oy = 0;
+    if (watchingMouse() && W.sleep < 0.3 && e.visible) {
+      camera.updateMatrixWorld(); bearBody.updateMatrixWorld(true);
+      bearBody.localToWorld(_eyePos.set((i ? 1 : -1) * EYE.x, EYE.y, fz(EYE.x, EYE.y))).project(camera);
+      const ex = (_eyePos.x + 1) / 2 * window.innerWidth, ey = (1 - _eyePos.y) / 2 * window.innerHeight;
+      const dx = mouse.x - ex, dy = -(mouse.y - ey), d = Math.hypot(dx, dy) || 1, m = 0.035 * Math.min(1, d / 120);
+      ox = dx / d * m; oy = dy / d * m;
+    }
+    const x = (i ? 1 : -1) * EYE.x + ox, y = EYE.y + oy;
+    e.position.set(x, y, fz(Math.abs(x), y));
+  });
   bearHappy.forEach(e => (e.visible = happy));
   bearSleepy.forEach(e => (e.visible = sleepy));
-  updateSteam(t, (1 - bs) * (1 - bearDown));
+  updateSteam(t, (1 - bs) * (1 - bearDown) * (1 + 0.8 * W.holdOut));
   bearHat.visible = alienHat.visible = W.hats;
+  // Halloween week: the jack-o'-lantern (lit after dark); bats flit about on the 31st
+  const now = new Date(), mon = now.getMonth(), day = now.getDate(), hr = now.getHours();
+  const halloween = params.has('halloween') || (mon === 9 && day >= 24);
+  pumpkin.visible = halloween;
+  if (halloween) {
+    const lit = params.has('night') || hr >= 18 || hr < 6;
+    const flick = lit ? 0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 5.3) : 0;
+    pumpkinFace.forEach(f => (f.material = lit ? pumpkinGlow : pumpkinDark));
+    pumpkin.userData.glow.material.opacity = 0.55 * flick;
+  }
+  const batsOut = params.has('halloween') || (mon === 9 && day === 31);
+  bats.forEach((b, i) => {
+    const cyc = (t * 0.07 + i * 0.5) % 1;                       // a pass every ~14 s, then gone for a while
+    b.visible = batsOut && cyc < 0.35;
+    if (!b.visible) return;
+    const u = cyc / 0.35;
+    b.position.set(-2.4 + u * 4.6, 2.3 + 0.35 * Math.sin(u * 9 + i) + i * 0.25, 0.9 + 0.3 * i);
+    const flap = Math.sin(t * 22 + i) * 0.7;
+    b.userData[-1].rotation.y = flap; b.userData[1].rotation.y = -flap;
+  });
   updateConfetti(W.bdayT);
   bearBody.updateMatrixWorld(true); alienBody.updateMatrixWorld(true);
   updateZs(bearZs, bearBody.localToWorld(_zp.set(0.8, 2.05, 0.6)), t, zz, 0.95);
@@ -1075,7 +1217,7 @@ function pose(t) {
 
   // Alien: sways, hops every 5 s, drinks every 7 s, blinks, glances over at the bear.
   let us = params.has('preview') ? sip(t, 7, 6.3) : sipAt(t, ALIEN_SIPS);
-  us = Math.max(us * (1 - nomDown), W.cheer * 0.7, W.toastRaise * 0.85);
+  us = Math.max(us * (1 - nomDown), W.cheer * 0.7, W.toastRaise * 0.85, W.pourBarry);   // arms up holding the pot high
   // how long since its last sip began (for the contented "mmm" afterwards)
   const sinceSip = params.has('preview') ? (((t + 6.3) % 7) >= 3.8 ? ((t + 6.3) % 7) - 3.8 : ((t + 6.3) % 7) + 3.2)
                                          : lastStart(t, ALIEN_SIPS).since;
@@ -1087,7 +1229,7 @@ function pose(t) {
     if (m.since < 3.6 && us === 0 && !afterSip) { mood = MOODS[m.i % MOODS.length]; moodT = m.since; }
   }
   if (mood === 'content') mood = null;
-  if (W.sleep > 0.05 || W.nomYawn > 0 || W.croc > 0 || W.toastTurn > 0 || W.bookOut > 0) mood = null;
+  if (W.sleep > 0.05 || W.nomYawn > 0 || W.croc > 0 || W.toastTurn > 0 || W.bookOut > 0 || W.pot > 0 || W.waveN > 0) mood = null;
   const cuddle = W.croc > 0.95 && W.sleep < 0.3 && W.bookOut < 0.5;     // awake and hugging the crocodile
   const nz = Math.max(zz, W.doze);                   // asleep, or dozing off during the story
   if (W.party > 0.3 || W.thanks > 0.3) { mood = 'giggle'; moodT = (W.thanks > 0.3 ? t : W.bdayT) % 3.6; }   // giggly on birthdays
@@ -1095,13 +1237,14 @@ function pose(t) {
 
   const hp = t % 5;
   const hopping = false;   // the little hop is switched off
-  alien.position.y = hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0;
+  alien.position.y = (hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0) + 0.16 * W.pourBarry;   // up on tiptoes to reach Barry's mug
   if (mood === 'giggle') alien.position.y += Math.abs(Math.sin(moodT * 16)) * 0.035 * ease;   // little giggly bounce
   let tilt = params.has('rest') ? 0 : 0.035 * Math.sin(t * 1.3);
   if (mood === 'curious') tilt += 0.14 * ease;                  // head tilt
   if (mood === 'sleepy') tilt += 0.07 * ease * Math.sin(moodT * 1.2);   // slow, dozy sway
   if (cuddle) tilt += 0.09 * Math.sin(t * 2.2);              // rocking the crocodile side to side
-  tilt -= 0.07 * W.toastTurn;                                  // leans in for a toast
+  tilt -= 0.07 * W.toastTurn + 0.12 * W.pourBarry;            // leans in for a toast, or to pour for Barry
+  if (W.waveN > 0) tilt += 0.05 * Math.sin(W.waveT * 12.5) * W.waveN;   // wiggles as it waves
   alienBody.rotation.z = tilt * (1 - nz) - 0.17 * nz;   // asleep: leans over onto Barry
   if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn;
   const nomTall = 1 + 0.06 * W.nomYawn;
@@ -1110,7 +1253,7 @@ function pose(t) {
   if (D.alienX === undefined) D.alienX = alien.position.x;
   alien.position.x = D.alienX + 0.06 * nz;
   // bending down for the mug, and turning round to fetch Greg from behind (or put him back)
-  const reach = Math.sin(Math.PI * smooth(W.croc));
+  const reach = Math.sin(Math.PI * smooth(Math.max(W.croc, W.pot)));
   alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach;
   alienBody.rotation.y = -1.25 * reach;
   pivotAbout(alienBody, NOM_BEND_AT);
@@ -1120,11 +1263,30 @@ function pose(t) {
     alienPoses.meshes.forEach(m => (m.visible = false));
     nomStretch.showExtra(Math.min(NOM_STRETCH.length - 1, Math.round(W.nomStretch * NOM_STRETCH.length - 0.5)));
   } else nomStretch.meshes.forEach(m => (m.visible = false));
+  if (W.waveN > 0.06 && W.nomStretch <= 0.06) {        // waving hello
+    alienPoses.meshes.forEach(m => (m.visible = false));
+    nomWave.showExtra(Math.floor(W.waveT * 4) % 2);
+  } else nomWave.meshes.forEach(m => (m.visible = false));
   alienMug.rotation.set((MUG_TILT + ALIEN_ARM_LIFT * us - (0.4 + MUG_TILT) * smooth((us - 0.6) / 0.4)), 0, 0);
   nomFloor.position.set(...lerp3(NOM_FLOOR, NOM_SIDE, smooth(Math.max(W.croc * 3, D.crocSide || 0))));
   D.crocSide = W.croc > 0 ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
   alienBody.updateMatrixWorld(true);
   placeMug(alienMug, alienArms, ALIEN_MUG_HOLD, nomFloor, nomDown);
+
+  // the coffee pot: fetched from behind like Greg, then tipped to pour
+  pot.visible = W.pot > 0.001;
+  stream.visible = false;
+  if (pot.visible) {
+    const k = smooth(Math.min(1, W.pot * 2));
+    pot.position.set(...lerp3(POT_AWAY.p, POT_HOLD.p, k)); pot.position.y += Math.sin(Math.PI * k) * 0.15;
+    const toNom = smooth(W.pourNom);                       // turns to pour into its own mug (in front, on the floor)
+    pot.rotation.set(0, -Math.PI / 2 * toNom, -1.0 * Math.max(W.pourBarry, W.pourNom));
+    pot.position.y += 0.8 * W.pourBarry; pot.position.x += 0.22 * W.pourBarry; pot.position.z += 0.12 * toNom - 0.08 * W.pourBarry;
+    pot.position.y += 0.02 * toNom;
+    alienBody.updateMatrixWorld(true);
+    if (W.pourBarry > 0.6) pourStream(pot.userData.tip, bearMug.userData.top);
+    if (W.pourNom > 0.6) pourStream(pot.userData.tip, alienMug.userData.top);
+  }
 
   // Greg: Nom turns round, picks him up from behind and turns back hugging him (and the reverse to put him away)
   croc.visible = W.croc > 0.001 || params.has('greg');
@@ -1156,7 +1318,7 @@ function pose(t) {
   const gp = t % 13, glance = !params.has('rest') && !mood && gp > 5 && gp < 7;
   const sipping = us > 0.5;
   const mmm = params.get('expr') === 'content' || (!mood && afterSip && sinceSip < 4.8);   // eyes stay happily closed just after a sip
-  const happyEyes = nz < 0.5 && ((sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
+  const happyEyes = nz < 0.5 && (W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
   const sleepyEyes = nz > 0.5 || mood === 'sleepy' || (blink && !happyEyes);
   const wide = mood === 'curious' ? 1 + 0.15 * ease : 1;
   alienEyes.forEach(({ white, pupil, s, sleepy, happy }) => {
@@ -1165,6 +1327,7 @@ function pose(t) {
     sleepy.visible = sleepyEyes && !happyEyes;
     white.scale.set(EYE_R * wide, EYE_R * wide, 0.055);
     if (W.bookOut > 0.5) placePupil(pupil, 0.08, -0.03);                      // looking at the pictures in the book
+    else if (W.pourNom > 0.3) placePupil(pupil, 0, -0.1);                      // watching its own mug fill up
     else if (watchingMouse() && W.sleep < 0.3) lookAtMouse(white, pupil);          // following your mouse pointer
     else if (mood === 'curious') placePupil(pupil, 0, 0.05);  // looking straight up, wondering
     else if (glance) placePupil(pupil, 0.09, 0.04);
