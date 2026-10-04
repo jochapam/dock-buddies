@@ -104,8 +104,6 @@ enum Birthday {
         b.message = d.string(forKey: messageKey) ?? defaultMessage
         return b
     }
-
-}
 }
 
 /// Where new versions are published. The app checks here and updates itself.
