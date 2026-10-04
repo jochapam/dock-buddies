@@ -14,13 +14,18 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build (Apple Silicon + Intel)
         run: |
           swiftc --version
-          # compile once with errors visible, then the normal universal build
-          swiftc -parse-as-library -target arm64-apple-macos12 DockBuddies3D.swift -o /tmp/check
+          # compile once and turn any errors into annotations (visible on the run page), then the normal universal build
+          if ! swiftc -parse-as-library -target arm64-apple-macos12 DockBuddies3D.swift -o /tmp/check 2> errors.txt; then
+            cat errors.txt
+            grep -E ':[0-9]+:[0-9]+: error:' errors.txt | head -20 | \
+              sed -E 's/^([^:]+):([0-9]+):([0-9]+): error: (.*)$/::error file=DockBuddies3D.swift,line=\2,col=\3::\4/'
+            exit 1
+          fi
           bash build.sh
           lipo -archs "Dock Buddies 3D.app/Contents/MacOS/DockBuddies3D"
 
