@@ -666,9 +666,11 @@ stream.visible = false; scene.add(stream);
 const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3();
 function pourStream(from, to, t) {        // a stream of coffee arcing from the spout into a mug
   from.getWorldPosition(_s1); to.getWorldPosition(_s2); _s2.y -= 0.02;
-  const mid = _s1.clone().lerp(_s2, 0.5); mid.y += 0.05 + 0.06 * _s1.distanceTo(_s2);
+  if (_s1.y < _s2.y + 0.05) { stream.visible = false; return; }   // never pour uphill
+  // leaves the spout sideways, then falls straight down into the mug
   const wob = 0.008 * Math.sin(t * 30);
-  const curve = new THREE.QuadraticBezierCurve3(_s1.clone(), mid.add(new THREE.Vector3(wob, 0, wob)), _s2.clone());
+  const bend = new THREE.Vector3(_s2.x + wob, _s1.y, _s2.z + wob);
+  const curve = new THREE.QuadraticBezierCurve3(_s1.clone(), bend, _s2.clone());
   stream.geometry.dispose();
   stream.geometry = new THREE.TubeGeometry(curve, 16, 0.024, 8, false);
   stream.visible = true;
@@ -1294,6 +1296,17 @@ function pose(t) {
     pot.rotation.set(0, -Math.PI / 2 * toNom, -1.0 * Math.max(W.pourBarry, W.pourNom));
     pot.position.y += 0.75 * W.pourBarry; pot.position.x += 0.35 * W.pourBarry; pot.position.z += 0.2 * toNom - 0.02 * W.pourBarry;
     pot.position.y += 0.08 * toNom;
+    // bring the spout to just above the mug being filled, so the coffee always falls down into it
+    const aim = (mug, k, side, up = 0.28) => {
+      if (k <= 0) return;
+      alienBody.updateMatrixWorld(true); mug.parent.updateMatrixWorld(true);
+      mug.userData.top.getWorldPosition(_s2); _s2.x += side; _s2.y += up;
+      pot.userData.tip.getWorldPosition(_s1);
+      alienBody.worldToLocal(_s2); alienBody.worldToLocal(_s1);
+      pot.position.addScaledVector(_s2.sub(_s1), smooth(k));
+    };
+    aim(bearMug, W.pourBarry, -0.1);
+    aim(alienMug, W.pourNom, 0.06, 0.17);
     alienBody.updateMatrixWorld(true);
     if (W.pourBarry > 0.6) pourStream(pot.userData.tip, bearMug.userData.top, t);
     if (W.pourNom > 0.6) pourStream(pot.userData.tip, alienMug.userData.top, t);
