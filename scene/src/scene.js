@@ -891,7 +891,7 @@ if (params.has('mouse')) { const [mx, my] = params.get('mouse').split(',').map(N
 const watchingMouse = () => mouse && performance.now() - mouseMovedAt < 10000;   // stops after 10 s without movement
 /** the pointer is right by them (just above or beside the window) */
 const mouseNear = () => watchingMouse() && performance.now() - mouseMovedAt < 1500 &&
-  mouse.x > -50 && mouse.x < window.innerWidth + 50 && mouse.y > -70 && mouse.y < window.innerHeight + 10;
+  mouse.x > -90 && mouse.x < window.innerWidth + 90 && mouse.y > -130 && mouse.y < window.innerHeight + 30;
 const _eyePos = new THREE.Vector3();
 function lookAtMouse(white, pupil) {
   camera.updateMatrixWorld();
@@ -1024,9 +1024,12 @@ function direct(t) {
 
   // waving hello when your pointer comes close (Nom first; Barry joins in if you stay)
   const near = mouseNear();
-  const idle = !act && D.sleep < 0.01 && D.bMug === 0 && D.nMug === 0 && wakeT > 7 && bdayT === Infinity;
-  if (near && !D.wasNear && idle && t - D.lastWave > 40) { D.waveStart = t; D.lastWave = t; D.barryJoin = false; }
-  D.wasNear = near;
+  // waves as soon as your pointer has been near them for a moment (once per visit, at most every 15 s)
+  const idle = !act && D.sleep < 0.05 && D.bMug < 0.05 && D.nMug < 0.05 && wakeT > 3 && bdayT === Infinity;
+  if (near) { if (D.nearSince == null) D.nearSince = t; } else { D.nearSince = null; D.wavedThisVisit = false; }
+  if (near && idle && !D.wavedThisVisit && t - D.nearSince > 0.25 && t - D.lastWave > 15) {
+    D.waveStart = t; D.lastWave = t; D.barryJoin = false; D.wavedThisVisit = true;
+  }
   let waveT = params.has('wave') ? +params.get('wave') : (D.waveStart === null ? Infinity : t - D.waveStart);
   if (waveT > 1.2 && waveT < 1.3 && near) D.barryJoin = true;
   const waveN = waveT < 3.2 ? smooth(Math.min(waveT / 0.35, (3.2 - waveT) / 0.35)) : 0;
