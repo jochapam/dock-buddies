@@ -248,15 +248,11 @@ struct SettingsView: View {
             GroupBox(label: Text("Music").font(.headline)) {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("Jam along when music is playing", isOn: $model.jam)
-                    Picker("Listen to", selection: $model.jamDevice) {
-                        Text("Automatic (audio interface if plugged in)").tag("")
-                        ForEach(model.inputs) { input in Text(input.name).tag(input.id) }
+                    if model.jam {
+                        Text(model.app?.listener.running == true ? "Listening to the MiniFuse." : "Waiting for the MiniFuse to be plugged in.")
+                            .font(.caption).foregroundColor(.secondary)
                     }
-                    .disabled(!model.jam)
-                    if model.jam, let now = model.app?.listener.current {
-                        Text("Listening to: \(now.name)").font(.caption).foregroundColor(.secondary)
-                    }
-                    Text("Listens to your audio interface (like a MiniFuse) or the microphone to hear when music is on. Only the loudness and the beat are worked out, right here on this Mac: nothing is recorded, kept or sent anywhere.")
+                    Text("Listens only to the MiniFuse (never the Mac's microphone) to hear when she's playing. Only the loudness and the beat are worked out, right here on this Mac: nothing is recorded, kept or sent anywhere.")
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if !model.jamNote.isEmpty {
@@ -408,11 +404,9 @@ enum AudioInputs {
         }
     }
 
-    /// What "Automatic" listens to: a MiniFuse if one is plugged in, otherwise any plugged-in audio
-    /// interface, otherwise the Mac's own microphone.
-    static func automatic() -> AudioInput? {
-        let list = all()
-        return list.first { $0.name.lowercased().contains("minifuse") } ?? list.first { $0.external } ?? list.first
+    /// The MiniFuse audio interface, if it's plugged in. It's the only thing they listen to.
+    static func minifuse() -> AudioInput? {
+        all().first { $0.name.lowercased().contains("minifuse") }
     }
 }
 
@@ -565,24 +559,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
     var musicWasOn = false
     static let jamKey = "DockBuddiesJam", jamDeviceKey = "DockBuddiesJamDevice"
 
-    /// The input chosen in Settings (or the automatic choice).
-    func chosenInput() -> AudioInput? {
-        let uid = UserDefaults.standard.string(forKey: AppDelegate.jamDeviceKey) ?? ""
-        if !uid.isEmpty, let d = AudioInputs.all().first(where: { $0.id == uid }) { return d }
-        return AudioInputs.automatic()
-    }
+    /// They only ever listen to the MiniFuse (never the Mac's microphone).
+    func chosenInput() -> AudioInput? { AudioInputs.minifuse() }
 
     func restartListener() {
-        guard UserDefaults.standard.bool(forKey: AppDelegate.jamKey), listener.running else { return }
         listener.stop()
-        _ = listener.start(chosenInput())
+        if let m = chosenInput() { _ = listener.start(m) }
         settingsModel?.objectWillChange.send()
     }
 
-    /// Every so often: if an audio interface has been plugged in (or unplugged), switch to it.
+    /// Every 10 seconds: start listening when the MiniFuse is plugged in, stop when it's unplugged.
     @objc func checkInputs() {
-        guard listener.running else { return }
-        if chosenInput()?.id != listener.current?.id { restartListener() }
+        guard UserDefaults.standard.bool(forKey: AppDelegate.jamKey),
+              AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { return }
+        let m = chosenInput()
+        if m?.id != listener.current?.id || listener.running != (m != nil) {
+            restartListener()
+            if m == nil { musicWasOn = false; webView.evaluateJavaScript("window.setMusic && window.setMusic(false, 0, false, 0)", completionHandler: nil) }
+        }
     }
     var card: CardPanel?
     var cardTimer: Timer?
@@ -1037,12 +1031,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         }
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
-            if !listener.start(chosenInput()) { settingsModel?.jamNote = "Couldn't open the microphone." }
-            else { settingsModel?.jamNote = "" }
+            if let m = chosenInput() { settingsModel?.jamNote = listener.start(m) ? "" : "Couldn't open the MiniFuse." }
+            else { settingsModel?.jamNote = "" }   // they'll start listening as soon as it's plugged in
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { granted in
                 Task { @MainActor in
-                    if granted { _ = self.listener.start(self.chosenInput()); self.settingsModel?.jamNote = ""; self.settingsModel?.objectWillChange.send() }
+                    if granted { if let m = self.chosenInput() { _ = self.listener.start(m) }; self.settingsModel?.jamNote = ""; self.settingsModel?.objectWillChange.send() }
                     else { self.settingsModel?.jamNote = "Microphone access was turned down. You can allow it in System Settings → Privacy & Security → Microphone." }
                 }
             }

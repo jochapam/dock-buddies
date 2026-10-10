@@ -33,7 +33,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <key>LSUIElement</key><true/>
-    <key>NSMicrophoneUsageDescription</key><string>Dock Buddies listens for music so Barry and Nom can jam along. Only the loudness and beat are worked out on your Mac; nothing is recorded or sent.</string>
+    <key>NSMicrophoneUsageDescription</key><string>Dock Buddies listens to your MiniFuse audio interface so Barry and Nom can jam along. Only the loudness and beat are worked out on your Mac; nothing is recorded or sent.</string>
 </dict>
 </plist>
 EOF
