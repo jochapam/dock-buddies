@@ -12,5 +12,5 @@
 - Director activities (scene.js `ACTS`): toast, croc (Greg cuddle), stretch, story (Barry reads a picture book; favourite in the evening), refill (Nom pours from a coffee pot); waving hello when the pointer comes close; Halloween pumpkin (24-31 Oct) and bats (31st); plus waking up with a stretch and yawn. The app's ☕ > Ask Them To menu calls `window.doActivity(name)`.
 - Chats (scene/src/chats.js): short scripted conversations every 12-18 min; bubbles drawn natively by the app (WKScriptMessageHandler "say"), in-scene sprite fallback for tests (`?chat=N&ct=seconds`).
 - Movie night (act "movie"): TV front-right, popcorn, Greg for the scary bit; evenings (alternating with story) and weekend daytime.
-- Jamming: Settings > Music toggle; Swift MusicListener (mic, loudness + beats only) calls window.setMusic(on, level, beat, bpm); tambourine + maracas + notes. Test with `?jam`.
+- Jamming: Settings > Music toggle; Swift MusicListener (MiniFuse audio interface ONLY, never the built-in mic; loudness + beats only) calls window.setMusic(on, level, beat, bpm); tambourine + maracas + notes. Test with `?jam`.
 - Stored meshes are used in sculpt order; anything sculpted after the stored set is sculpted live. So add new shapes at the END (after Greg), check with `scene/multi.py` (one page load, many states via `__params.set(...)`), then re-bake when final.
