@@ -1008,6 +1008,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
                 if manual { tell("You're up to date", "Dock Buddies \(Updates.currentVersion) is the latest version.") }
                 return
             }
+            let current = Bundle.main.bundleURL
+            guard FileManager.default.isWritableFile(atPath: current.deletingLastPathComponent().path),
+                  !current.path.contains("/AppTranslocation/"), !current.path.hasPrefix("/Volumes/") else {
+                noteUpdate("Version \(latest) is out, but this copy can't replace itself where it is (\(current.deletingLastPathComponent().path)). Drag Dock Buddies into Applications, open it from there, and check again.")
+                if manual { tell("Can't update here", "Dock Buddies can't replace itself in \(current.deletingLastPathComponent().path). Move it to Applications and try again.") }
+                return
+            }
+            // if we already tried to install this version recently and are still on the old one, don't loop
+            let d = UserDefaults.standard
+            if !manual, d.string(forKey: "DockBuddiesTriedVersion") == latest,
+               let when = d.object(forKey: "DockBuddiesTriedAt") as? Date, Date().timeIntervalSince(when) < 6 * 3600 {
+                noteUpdate("Installing \(latest) didn't work last time; will try again later. (Use Check for Updates to try now.)")
+                return
+            }
+            d.set(latest, forKey: "DockBuddiesTriedVersion"); d.set(Date(), forKey: "DockBuddiesTriedAt")
             let assets = json["assets"] as? [[String: Any]] ?? []
             guard let asset = assets.first(where: { ($0["name"] as? String) == Updates.assetName }),
                   let link = asset["browser_download_url"] as? String, let url = URL(string: link)
@@ -1023,21 +1038,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
             guard let newApp = try FileManager.default.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)
                     .first(where: { $0.pathExtension == "app" }) else { throw URLError(.cannotDecodeContentData) }
 
-            let current = Bundle.main.bundleURL
-            guard FileManager.default.isWritableFile(atPath: current.deletingLastPathComponent().path),
-                  !current.path.contains("/AppTranslocation/"), !current.path.hasPrefix("/Volumes/") else {
-                noteUpdate("Version \(latest) is ready, but this copy can't replace itself where it is (\(current.deletingLastPathComponent().path)). Drag Dock Buddies into Applications, open it from there, and check again.")
-                if manual { tell("Can't update here", "Dock Buddies can't replace itself in \(current.deletingLastPathComponent().path). Move it to Applications and try again.") }
-                return
-            }
             noteUpdate("Installing \(latest) and restarting…")
             if manual { tell("Updating to \(latest)", "Dock Buddies will restart in a moment.") }
             // A tiny helper swaps the app once this copy has quit, then opens the new one.
+            let log = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DockBuddies.log").path
             let script = """
+            exec >> "\(log)" 2>&1
+            echo "$(date) helper: waiting for the old copy to quit"
             while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.3; done
-            rm -rf "\(current.path)"
-            mv "\(newApp.path)" "\(current.path)"
+            if rm -rf "\(current.path)" && ditto "\(newApp.path)" "\(current.path)"; then
+              echo "$(date) helper: installed $(defaults read "\(current.path)/Contents/Info" CFBundleShortVersionString)"
+            else
+              echo "$(date) helper: FAILED to replace \(current.path)"
+            fi
             xattr -dr com.apple.quarantine "\(current.path)" 2>/dev/null
+            sleep 0.5
             open "\(current.path)"
             rm -rf "\(work.path)"
             """
