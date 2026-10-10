@@ -153,6 +153,17 @@ final class SettingsModel: ObservableObject {
     @Published var loginNote = ""
     @Published var jam: Bool { didSet { if jam != oldValue { d.set(jam, forKey: AppDelegate.jamKey); app?.setJam(jam) } } }
     @Published var jamNote = ""
+    @Published var updateStatus = ""
+
+    func refreshUpdateStatus() {
+        let d = UserDefaults.standard
+        var text = d.string(forKey: AppDelegate.updateStatusKey) ?? "Not checked yet."
+        if let when = d.object(forKey: AppDelegate.updateCheckedKey) as? Date {
+            let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short
+            text += "\nLast checked: " + f.string(from: when)
+        }
+        updateStatus = text
+    }
     @Published var jamDevice: String { didSet { if jamDevice != oldValue { d.set(jamDevice, forKey: AppDelegate.jamDeviceKey); app?.restartListener() } } }
     @Published var inputs: [AudioInput] = []
     @Published var screenID: Int { didSet { if screenID != oldValue && !syncing { app?.moveToScreen(screenID) } } }
@@ -243,6 +254,17 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
                 }
+            }
+
+            GroupBox(label: Text("About").font(.headline)) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Dock Buddies \(Updates.currentVersion)").font(.body.weight(.semibold))
+                    Text(model.updateStatus).font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Check for Updates") { model.app?.manualCheckForUpdates() }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
             }
 
             GroupBox(label: Text("Music").font(.headline)) {
@@ -793,6 +815,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         }
         settingsModel?.refreshScreens()
         settingsModel?.inputs = AudioInputs.all()
+        settingsModel?.refreshUpdateStatus()
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
@@ -953,10 +976,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
     @objc func manualCheckForUpdates() { Task { await checkForUpdates(manual: true) } }
 
     /// Looks at the latest GitHub release; if it's newer, downloads it, swaps it in and relaunches.
+    static let updateStatusKey = "DockBuddiesUpdateStatus", updateCheckedKey = "DockBuddiesUpdateChecked"
+
+    /// Remember (and show in Settings) what the last update check found; also noted in ~/Library/Logs/DockBuddies.log.
+    func noteUpdate(_ text: String) {
+        let d = UserDefaults.standard
+        d.set(text, forKey: AppDelegate.updateStatusKey)
+        d.set(Date(), forKey: AppDelegate.updateCheckedKey)
+        settingsModel?.refreshUpdateStatus()
+        let log = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DockBuddies.log")
+        let line = "\(Date()) [\(Updates.currentVersion)] \(text)\n"
+        if let h = try? FileHandle(forWritingTo: log) { h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close() }
+        else { try? line.write(to: log, atomically: true, encoding: .utf8) }
+    }
+
     func checkForUpdates(manual: Bool) async {
         if updating { return }
         updating = true
         defer { updating = false }
+        noteUpdate("Checking…")
         do {
             var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Updates.repo)/releases/latest")!)
             req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -966,6 +1004,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
                   let tag = json["tag_name"] as? String else { throw URLError(.badServerResponse) }
             let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
             guard Updates.isNewer(latest, than: Updates.currentVersion) else {
+                noteUpdate("Up to date (latest is \(latest)).")
                 if manual { tell("You're up to date", "Dock Buddies \(Updates.currentVersion) is the latest version.") }
                 return
             }
@@ -974,6 +1013,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
                   let link = asset["browser_download_url"] as? String, let url = URL(string: link)
             else { throw URLError(.fileDoesNotExist) }
 
+            noteUpdate("Downloading \(latest)…")
             let (zip, _) = try await URLSession.shared.download(from: url)
             let work = FileManager.default.temporaryDirectory.appendingPathComponent("DockBuddiesUpdate-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
@@ -984,10 +1024,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
                     .first(where: { $0.pathExtension == "app" }) else { throw URLError(.cannotDecodeContentData) }
 
             let current = Bundle.main.bundleURL
-            guard FileManager.default.isWritableFile(atPath: current.deletingLastPathComponent().path) else {
+            guard FileManager.default.isWritableFile(atPath: current.deletingLastPathComponent().path),
+                  !current.path.contains("/AppTranslocation/"), !current.path.hasPrefix("/Volumes/") else {
+                noteUpdate("Version \(latest) is ready, but this copy can't replace itself where it is (\(current.deletingLastPathComponent().path)). Drag Dock Buddies into Applications, open it from there, and check again.")
                 if manual { tell("Can't update here", "Dock Buddies can't replace itself in \(current.deletingLastPathComponent().path). Move it to Applications and try again.") }
                 return
             }
+            noteUpdate("Installing \(latest) and restarting…")
             if manual { tell("Updating to \(latest)", "Dock Buddies will restart in a moment.") }
             // A tiny helper swaps the app once this copy has quit, then opens the new one.
             let script = """
@@ -1004,6 +1047,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
             try helper.run()
             NSApp.terminate(nil)
         } catch {
+            noteUpdate("Couldn't update: \(error.localizedDescription)")
             if manual { tell("Couldn't check for updates", "Please check the internet connection and try again.\n(\(error.localizedDescription))") }
         }
     }
