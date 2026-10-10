@@ -162,8 +162,7 @@ final class SettingsModel: ObservableObject {
         }
         if let app {                              // show where they actually are, without moving them
             syncing = true
-            jam = d.bool(forKey: AppDelegate.jamKey)
-        screenID = AppDelegate.displayID(app.targetScreen())
+            screenID = AppDelegate.displayID(app.targetScreen())
             syncing = false
         }
     }
@@ -186,6 +185,7 @@ final class SettingsModel: ObservableObject {
         if #available(macOS 13.0, *) { openAtLogin = SMAppService.mainApp.status == .enabled } else { openAtLogin = false }
         screenID = AppDelegate.displayID(app.targetScreen())
         onDock = d.bool(forKey: AppDelegate.onDockKey)
+        jam = d.bool(forKey: AppDelegate.jamKey)
         refreshScreens()
     }
 
