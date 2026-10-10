@@ -334,6 +334,8 @@ const BEAR_PIVOT = [0, 1.46, 0.12];   // the arms swing from the shoulders when 
 const BEAR_ARM_LIFT = 0.75;          // how far (radians) the arms swing up to drink
 // a good-morning stretch: arms out to the sides
 // waving hello with his outside arm (two poses to swing between)
+// tapping bongos: one paw lifted at a time
+const BEAR_TAP = [-1, 1].map(only => ({ lift: 0.3, sx: 0.9, only }));
 const BEAR_WAVE = [[0.9, 1.15, -0.55], [0.9, 0.8, -0.8]].map(([lift, yaw, spread]) => ({ lift, yaw, spread, sx: 0.9, only: 1 }));
 const BEAR_STRETCH = [[0.3, 0.25], [0.55, 0.6], [0.8, 0.95], [0.95, 1.25]].map(([lift, yaw]) => ({ lift, yaw, sx: 0.9 }));   // arms out to the sides
 const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting on top of the fur
@@ -411,6 +413,7 @@ const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting 
   // the stretch poses are sculpted after everything else (see the end of the characters)
   var makeBearStretch = () => S.poses(0, BEAR_PIVOT, bearBuild, bearMat, bearBody, 0, BEAR_STRETCH);
   var makeBearWave = () => S.poses(0, BEAR_PIVOT, bearBuild, bearMat, bearBody, 0, BEAR_WAVE);
+  var makeBearTap = () => S.poses(0, BEAR_PIVOT, bearBuild, bearMat, bearBody, 0, BEAR_TAP);
   addFuzz(bearPoses, 0xffffff, 0.055, 210, true);
 }
 // Face, placed on the surface: eyes fairly high and wide, a round cream snout just below.
@@ -456,6 +459,8 @@ alien.add(alienBody);
 // One soft body: tube ears, feet and arms all melt smoothly into it.
 const ALI_PIVOT = [0, 0.84, 0.05];   // the arms swing from here when it drinks
 const ALIEN_ARM_LIFT = 0.8;   // enough to bring the mug up to its mouth
+// strumming the ukulele: the arm nearest Barry swings down and up
+const NOM_STRUM = [0.05, 0.4].map(lift => ({ lift, sx: 0.5, only: 1 }));
 const NOM_WAVE = [[2.0, 0.25], [2.0, 0.75]].map(([lift, spread]) => ({ lift, spread, sx: 0.5, only: -1 }));   // waving with its outside arm
 const NOM_STRETCH = [[0.5, 0.2], [1.0, 0.45], [1.4, 0.65], [1.7, 0.8]].map(([lift, spread]) => ({ lift, spread, sx: 0.5 }));   // arms up beside its head
 {
@@ -501,6 +506,7 @@ const NOM_STRETCH = [[0.5, 0.2], [1.0, 0.45], [1.4, 0.65], [1.7, 0.8]].map(([lif
   var alienPoses = S.poses(ALIEN_ARM_LIFT, ALI_PIVOT, alienBuild, alienMat, alienBody);
   var makeNomStretch = () => S.poses(0, ALI_PIVOT, alienBuild, alienMat, alienBody, 0, NOM_STRETCH);
   var makeNomWave = () => S.poses(0, ALI_PIVOT, alienBuild, alienMat, alienBody, 0, NOM_WAVE);
+  var makeNomStrum = () => S.poses(0, ALI_PIVOT, alienBuild, alienMat, alienBody, 0, NOM_STRUM);
   addFuzz(alienPoses, C.alien, 0.045, 230, false);
 }
 
@@ -644,6 +650,8 @@ const nomStretch = makeNomStretch();          // sculpted after Greg, so the sto
 nomStretch.meshes.forEach(m => (m.visible = false));
 const nomWave = makeNomWave(), bearWave = makeBearWave();   // waving hello (sculpted last)
 nomWave.meshes.forEach(m => (m.visible = false)); bearWave.meshes.forEach(m => (m.visible = false));
+const nomStrum = makeNomStrum(), bearTap = makeBearTap();   // playing in the band (sculpted last)
+nomStrum.meshes.forEach(m => (m.visible = false)); bearTap.meshes.forEach(m => (m.visible = false));
 
 // =====================================================================
 // Coffee pot for refills (plain geometry)
@@ -781,6 +789,31 @@ const maracas = [-1, 1].map(s => {
   handle.position.y = 0.04; g.add(handle);
   g.rotation.z = -s * 0.25; g.visible = false; return g;
 });
+const wood = new THREE.MeshToonMaterial({ color: 0xb5733f, gradientMap: TOON_BANDS.cel });
+const drumSkin = new THREE.MeshToonMaterial({ color: 0xf6ead2, gradientMap: TOON_BANDS.cel });
+const bongos = new THREE.Group(); bearBody.add(bongos);
+bongos.position.set(0, 0.84, 1.3); bongos.rotation.x = 0.3;
+for (const [x, r] of [[-0.4, 0.17], [0.4, 0.14]]) {          // a big one and a little one, under his paws
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.82, 0.26, 28), wood); shell.position.x = x; bongos.add(shell);
+  const top = new THREE.Mesh(new THREE.CircleGeometry(r * 0.96, 28), drumSkin); top.rotation.x = -Math.PI / 2; top.position.set(x, 0.131, 0); bongos.add(top);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.016, 8, 28), gold); rim.rotation.x = Math.PI / 2; rim.position.set(x, 0.12, 0); bongos.add(rim);
+}
+{ const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.07), wood); bongos.add(bridge); }
+bongos.visible = false;
+const uke = new THREE.Group(); alienBody.add(uke);
+uke.position.set(0.16, 0.6, 0.62); uke.rotation.set(0, 0, 0.45);
+{
+  const bodyMat = new THREE.MeshToonMaterial({ color: 0xd08a4a, gradientMap: TOON_BANDS.cel });
+  for (const [x, r] of [[0, 0.15], [-0.17, 0.115]]) { const b = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), bodyMat); b.position.x = x; b.scale.z = 0.32; uke.add(b); }
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(0.045, 20), M.black); hole.position.set(-0.08, 0.0, 0.05); uke.add(hole);
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.05, 0.03), new THREE.MeshToonMaterial({ color: 0x7a4a2e, gradientMap: TOON_BANDS.cel }));
+  neck.position.set(-0.45, 0, 0.02); uke.add(neck);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.075, 0.035), neck.material); head.position.set(-0.67, 0.0, 0.02); head.rotation.z = 0.15; uke.add(head);
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.07, 0.015), neck.material); bridge.position.set(0.07, 0, 0.05); uke.add(bridge);
+  const strMat = new THREE.MeshBasicMaterial({ color: 0xf3ecdc });
+  for (let i = 0; i < 4; i++) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.004, 0.004), strMat); st.position.set(-0.3, -0.018 + i * 0.012, 0.058); uke.add(st); }
+}
+uke.visible = false;
 const noteTex = ['♪', '♫'].map(ch => {
   const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d');
   g.font = 'bold 78px "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -1053,9 +1086,9 @@ function pickChat() {
 }    // seconds to bend down and put a mug on the floor (or pick it up)
 const ACT_TIMES = sipSchedule(13579, 150, 240, 480);
 // Music: the app listens (only if you allow it in Settings) and tells us roughly how loud it is and when the beats land
-const MUSIC = { on: false, level: 0, lastBeat: -1e9, bpm: 110 };
-window.setMusic = (on, level, beat, bpm) => {
-  MUSIC.on = !!on; MUSIC.level = level || 0;
+const MUSIC = { on: false, level: 0, lastBeat: -1e9, bpm: 110, bass: false };
+window.setMusic = (on, level, beat, bpm, bass) => {
+  MUSIC.on = !!on; MUSIC.level = level || 0; MUSIC.bass = !!bass;
   if (beat) MUSIC.lastBeat = performance.now();
   if (bpm > 40 && bpm < 220) MUSIC.bpm = bpm;
   if (on) lastActivityMs = performance.now();               // music wakes them up and keeps them awake
@@ -1133,6 +1166,11 @@ function direct(t) {
   // instruments come out once the mugs are down, and go away before they're picked up
   D.jamIn = (jamming && D.bMug >= 1 && D.nMug >= 1) ? Math.min(1, (D.jamIn || 0) + dt / 0.6) : Math.max(0, (D.jamIn || 0) - dt / 0.6);
   if (params.has('jam')) D.jamIn = 1;
+  // who plays what: bass -> a laid-back groove (bongos + shaker); guitar -> the band (bongos + ukulele)
+  // or, every other time, the party set (tambourine + maracas)
+  if (D.jamIn > 0 && !D.jamSet) { D.jamSet = MUSIC.bass ? 'groove' : (D.jamFlip ? 'party' : 'band'); D.jamFlip = !D.jamFlip; }
+  if (D.jamIn === 0) D.jamSet = null;
+  if (params.has('jamset')) D.jamSet = params.get('jamset');
   const step = (v, up) => up ? Math.min(1, v + dt / MUG_MOVE) : Math.max(0, v - dt / MUG_MOVE);
   if (params.has('mug')) D.bMug = D.nMug = +params.get('mug');
   else { D.bMug = step(D.bMug, bearWants); D.nMug = step(D.nMug, nomWants); }
@@ -1220,7 +1258,7 @@ function direct(t) {
   return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
            stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
            toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze,
-           pot: D.pot || 0, pourBarry, pourNom, holdOut, chat, movieT, tvOn, bowl, scary, watching, jamIn: D.jamIn || 0, waveN, waveB, waveT, dt };
+           pot: D.pot || 0, pourBarry, pourNom, holdOut, chat, movieT, tvOn, bowl, scary, watching, jamIn: D.jamIn || 0, jamSet: D.jamSet || 'party', waveN, waveB, waveT, dt };
 }
 const BDAY_LEN = 22;
 
@@ -1304,16 +1342,19 @@ function pose(t) {
   // the beat (when jamming): a quick pulse on each beat, and a slow sway every two beats
   const sinceBeat = params.has('jam') ? (t % (60 / 112)) : (performance.now() - MUSIC.lastBeat) / 1000;
   const beat = Math.exp(-sinceBeat / 0.13) * W.jamIn;
-  const sway = Math.sin(Math.PI * sinceBeat / (60 / MUSIC.bpm) + (D.swayFlip ? Math.PI : 0)) * W.jamIn;
+  const sway = Math.sin(Math.PI * sinceBeat / (60 / MUSIC.bpm) + (D.swayFlip ? Math.PI : 0)) * W.jamIn * (D.jamSet === 'groove' ? 0.6 : 1);
   if (sinceBeat < D.lastSinceBeat) D.swayFlip = !D.swayFlip;   // a new beat
-  const newBeat = sinceBeat < (D.lastSinceBeat ?? 1e9); D.lastSinceBeat = sinceBeat;          // what the director says is happening
+  const newBeat = sinceBeat < (D.lastSinceBeat ?? 1e9); D.lastSinceBeat = sinceBeat;
+  if (newBeat) D.beatN = (D.beatN || 0) + 1;
+  const beatPhase = Math.min(1, sinceBeat / (60 / MUSIC.bpm));          // 0 on the beat, 1 just before the next
+  const drums = W.jamIn > 0.01 && W.jamSet !== 'party', strum = W.jamIn > 0.01 && W.jamSet === 'band';          // what the director says is happening
   const zz = smooth((W.sleep - 0.45) / 0.55);  // eyes closed / leaning: second half of falling asleep
   const bearDown = W.bMug, nomDown = W.nMug;   // 0 = mug in hand, 1 = on the floor (in between: bending to put it down / pick it up)
   // Bear: breathes; sips now and then; on birthdays he raises his mug for a toast.
   let bs = params.has('preview') ? sip(t, 9, 4.8) : sipAt(t, BEAR_SIPS);
   const munch = W.bowl > 0.9 && W.watching > 0.9 && W.scary < 0.1 ? smooth(Math.min(((W.movieT + 2) % 7) / 0.5, (1.6 - ((W.movieT + 2) % 7)) / 0.5)) : 0;
   bs = Math.max(bs * (1 - bearDown), W.cheer * 0.6, W.toastRaise * 0.8, W.bookOut * 0.35,
-                W.bowl * 0.25 + 0.5 * munch, W.jamIn * (0.22 + 0.3 * beat));   // book / popcorn bowl / tambourine held up
+                W.bowl * 0.25 + 0.5 * munch, W.jamSet === 'party' ? W.jamIn * (0.22 + 0.3 * beat) : 0);   // book / popcorn bowl / tambourine held up
   const breath = 1 + (0.012 + 0.014 * zz) * Math.sin(t * (1.6 - 0.8 * zz));   // slower, deeper breaths when asleep
   const tall = 1 + 0.045 * W.stretch;          // stretching up tall
   const bSquash = 1 - 0.09 * Math.sin(Math.PI * W.bMug);   // squashes down a little as he bends over
@@ -1333,6 +1374,12 @@ function pose(t) {
     bearPoses.meshes.forEach(m => (m.visible = false));
     bearWave.showExtra(Math.floor(W.waveT * 4) % 2);
   } else bearWave.meshes.forEach(m => (m.visible = false));
+  // bongos: a paw comes down on each beat (left, right, left…); half as often for a bass groove
+  const tapHit = W.jamSet === 'groove' ? ((D.beatN || 0) % 2 === 0) : true;
+  if (W.jamIn > 0.3 && drums && W.waveB <= 0.06 && (beatPhase > 0.3 || !tapHit)) {
+    bearPoses.meshes.forEach(m => (m.visible = false));
+    bearTap.showExtra((D.beatN || 0) % 2);
+  } else bearTap.meshes.forEach(m => (m.visible = false));
   bearMug.rotation.set((MUG_TILT + BEAR_ARM_LIFT * bs - (0.5 + MUG_TILT) * smooth((bs - 0.6) / 0.4)), 0, 0);
   // for a refill, Barry sets his mug down by Nom (and it stays there until he picks it up again)
   if (W.pot > 0 || W.pourBarry > 0) D.bSide = 1; else if (bearDown < 0.02) D.bSide = 0;
@@ -1340,7 +1387,8 @@ function pose(t) {
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
   // popcorn and tambourine ride in his paws, kept upright
   popcorn.visible = W.bowl > 0.01; popcorn.scale.setScalar(0.4 + 0.6 * W.bowl); popcorn.rotation.x = BEAR_ARM_LIFT * bs - 0.15;
-  tambourine.visible = W.jamIn > 0.01; tambourine.scale.setScalar(0.4 + 0.6 * W.jamIn);
+  tambourine.visible = W.jamIn > 0.01 && W.jamSet === 'party'; tambourine.scale.setScalar(0.4 + 0.6 * W.jamIn);
+  bongos.visible = drums; bongos.scale.setScalar(0.4 + 0.6 * W.jamIn);
   tambourine.rotation.set(BEAR_ARM_LIFT * bs - 0.25, 0.2, 0.35 * beat * Math.sin(t * 40));
   // reading aloud: little mouth movements in bursts, like words
   const chatting = W.chat && W.chat.who === 'B' && W.chat.text && W.chat.lineT < W.chat.len - 0.5;
@@ -1423,7 +1471,8 @@ function pose(t) {
   updateSteam(t, (1 - bs) * (1 - bearDown) * (1 + 0.8 * W.holdOut));
   bearHat.visible = alienHat.visible = W.hats;
   // maracas in Nom's paws, shaken on the beat
-  maracas.forEach((m, i) => { m.visible = W.jamIn > 0.01; m.scale.setScalar(0.4 + 0.6 * W.jamIn); m.rotation.x = 0.5 * beat * Math.sin(t * 36 + i * 2); });
+  uke.visible = strum; uke.scale.setScalar(1.45 * (0.4 + 0.6 * W.jamIn)); uke.rotation.z = 0.45 + 0.03 * beat;
+  maracas.forEach((m, i) => { m.visible = W.jamIn > 0.01 && W.jamSet !== 'band' && (W.jamSet === 'party' || i === 1); m.scale.setScalar(0.4 + 0.6 * W.jamIn); m.rotation.x = 0.5 * beat * Math.sin(t * 36 + i * 2); });
   // musical notes drift up on the beats
   if (newBeat && W.jamIn > 0.5) { const n = notes[(D.noteI = ((D.noteI || 0) + 1) % notes.length)]; n.userData.born = t; n.userData.x = -1.6 + Math.random() * 2.0; }
   notes.forEach(n => {
@@ -1482,7 +1531,7 @@ function pose(t) {
 
   // Alien: sways, hops every 5 s, drinks every 7 s, blinks, glances over at the bear.
   let us = params.has('preview') ? sip(t, 7, 6.3) : sipAt(t, ALIEN_SIPS);
-  us = Math.max(us * (1 - nomDown), W.cheer * 0.7, W.toastRaise * 0.85, 0.5 * Math.max(W.pourBarry, W.pourNom), W.jamIn * (0.15 + 0.45 * beat));   // lifts the pot a little to pour
+  us = Math.max(us * (1 - nomDown), W.cheer * 0.7, W.toastRaise * 0.85, 0.5 * Math.max(W.pourBarry, W.pourNom), W.jamSet !== 'band' ? W.jamIn * (0.15 + (W.jamSet === 'groove' ? 0.25 : 0.45) * beat) : 0);   // lifts the pot a little to pour
   // how long since its last sip began (for the contented "mmm" afterwards)
   const sinceSip = params.has('preview') ? (((t + 6.3) % 7) >= 3.8 ? ((t + 6.3) % 7) - 3.8 : ((t + 6.3) % 7) + 3.2)
                                          : lastStart(t, ALIEN_SIPS).since;
@@ -1538,9 +1587,13 @@ function pose(t) {
     alienPoses.meshes.forEach(m => (m.visible = false));
     nomWave.showExtra(Math.floor(W.waveT * 4) % 2);
   } else nomWave.meshes.forEach(m => (m.visible = false));
+  if (W.jamIn > 0.3 && strum && W.waveN <= 0.06) {     // strumming: down on the beat, up on the off-beat
+    alienPoses.meshes.forEach(m => (m.visible = false));
+    nomStrum.showExtra(beatPhase < 0.5 ? 0 : 1);
+  } else nomStrum.meshes.forEach(m => (m.visible = false));
   alienMug.rotation.set((MUG_TILT + ALIEN_ARM_LIFT * us - (0.4 + MUG_TILT) * smooth((us - 0.6) / 0.4)), 0, 0);
-  nomFloor.position.set(...lerp3(NOM_FLOOR, NOM_SIDE, smooth(Math.max(W.croc * 3, D.crocSide || 0))));
-  D.crocSide = W.croc > 0 ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
+  nomFloor.position.set(...lerp3(NOM_FLOOR, NOM_SIDE, smooth(Math.max(W.croc * 3, W.jamSet === 'band' ? W.jamIn * 3 : 0, D.crocSide || 0))));
+  D.crocSide = (W.croc > 0 || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
   // the coffee pot, held in Nom's paws (brought out from behind, like Greg); Nom leans and shuffles
   // so the spout is right over the mug it's filling
   pot.visible = W.pot > 0.5;

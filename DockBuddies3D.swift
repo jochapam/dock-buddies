@@ -422,6 +422,7 @@ final class MusicListener {
     private var onsets: [Double] = []           // when recent beats landed
     private var lastOnset = 0.0, musicSince = 0.0, quietSince = 0.0
     private var noiseFloor: Float = 0.002
+    private var zcr: Float = 0.03            // how often the wave crosses zero: low for bass, higher for guitar
 
     func start(_ device: AudioInput?) -> Bool {
         if running { if device?.id == current?.id { return true }; stop() }
@@ -450,18 +451,25 @@ final class MusicListener {
         let n = Int(buffer.frameLength)
         if n == 0 { return }
         var rms: Float = 0                       // the loudest of the inputs (the instrument may be on input 1 or 2)
+        var loudest = 0
         for c in 0..<Int(buffer.format.channelCount) {
             let ch = data[c]
             var sum: Float = 0
             for i in 0..<n { sum += ch[i] * ch[i] }
-            rms = max(rms, (sum / Float(n)).squareRoot())
+            let r = (sum / Float(n)).squareRoot()
+            if r > rms { rms = r; loudest = c }
         }
+        var crossings = 0
+        let ch = data[loudest]
+        for i in 1..<n where (ch[i] >= 0) != (ch[i - 1] >= 0) { crossings += 1 }
+        let z = Float(crossings) / Float(n) * Float(48000 / buffer.format.sampleRate)   // per sample at 48 kHz
         let now = CFAbsoluteTimeGetCurrent()
         lock.lock(); defer { lock.unlock() }
         noiseFloor = rms < noiseFloor ? rms : noiseFloor + (rms - noiseFloor) * 0.0005   // slowly follows the room's quiet level
         energies.append(rms); if energies.count > 22 { energies.removeFirst() }
         let avg = energies.reduce(0, +) / Float(energies.count)
         level = min(1, rms * 8)
+        if rms > max(noiseFloor * 4, 0.004) { zcr += (z - zcr) * 0.05 }   // only while something's playing
         sustained.append(rms > max(noiseFloor * 3, 0.004)); if sustained.count > 170 { sustained.removeFirst() }
         // a beat: a jump well above the recent average, not too soon after the last one
         if rms > avg * 1.45 && rms > noiseFloor * 4 && rms > (relaxed ? 0.004 : 0.01) && now - lastOnset > 0.22 {
@@ -489,9 +497,9 @@ final class MusicListener {
     }
 
     /// The latest reading, and whether a beat has landed since the last time we asked.
-    func read() -> (music: Bool, level: Float, beat: Bool, bpm: Double) {
+    func read() -> (music: Bool, level: Float, beat: Bool, bpm: Double, bass: Bool) {
         lock.lock(); defer { lock.unlock() }
-        let r = (isMusic, level, beatPending, bpm)
+        let r = (isMusic, level, beatPending, bpm, zcr < 0.012)
         beatPending = false
         return r
     }
@@ -814,7 +822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         if listener.running {                       // music news for the scene: on/off, loudness, beats
             let r = listener.read()
             if r.music || musicWasOn {
-                webView.evaluateJavaScript("window.setMusic && window.setMusic(\(r.music), \(r.level), \(r.beat), \(r.bpm))", completionHandler: nil)
+                webView.evaluateJavaScript("window.setMusic && window.setMusic(\(r.music), \(r.level), \(r.beat), \(r.bpm), \(r.bass))", completionHandler: nil)
             }
             musicWasOn = r.music
         }
