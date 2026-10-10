@@ -3,7 +3,7 @@
 // Each line: [who, words, Barry's face, Nom's face]
 //   who:   'B' (Barry) or 'N' (Nom). Words can be '' for a reaction with no bubble.
 //   Barry: normal, happy, sleepy, wonder
-//   Nom:   normal, happy, giggle, curious, wonder, groan, sleepy, o
+//   Nom:   normal, happy, giggle, curious, wonder, groan, sleepy, o   (Nom always laughs at Barry's jokes)
 // Optional:
 //   when(c): only use this chat when it fits the moment. c has { hour, day (0 = Sunday), month, date, activeMin }
 //   then:    an activity to do straight afterwards (e.g. 'stretch', 'refill')
@@ -17,41 +17,41 @@ const weekday = (c) => c.day >= 1 && c.day <= 5;
 const busy = (c) => c.activeMin >= 50;            // you've been working for a while without a break
 
 export const CHATS = [
-  // ---------------- Barry's dad jokes ----------------
+  // ---------------- Barry's dad jokes (Nom always laughs) ----------------
   { lines: [['B', 'Why did the coffee call the police?', 'normal', 'curious'], ['N', 'Why?', 'normal', 'curious'],
-            ['B', 'It got mugged.', 'happy', 'normal'], ['N', 'Barry…', 'happy', 'groan']] },
+            ['B', 'It got mugged.', 'happy', 'normal'], ['N', 'Hahaha! Mugged!', 'happy', 'giggle']] },
   { lines: [['B', 'I only drink coffee on days ending in "y".', 'normal', 'normal'], ['N', '…that\'s every day.', 'normal', 'o'],
-            ['B', 'Exactly.', 'happy', 'groan']] },
+            ['B', 'Exactly.', 'happy', 'normal'], ['N', 'Hehehe!', 'happy', 'giggle']] },
   { lines: [['B', 'What do you call a bear with no teeth?', 'normal', 'curious'], ['N', 'Hmm?', 'normal', 'curious'],
-            ['B', 'A gummy bear!', 'happy', 'normal'], ['N', 'Hehehe', 'happy', 'giggle']] },
+            ['B', 'A gummy bear!', 'happy', 'normal'], ['N', 'Hehehe!', 'happy', 'giggle']] },
   { lines: [['B', 'I told Greg a crocodile joke.', 'normal', 'normal'], ['N', 'Did he laugh?', 'normal', 'curious'],
-            ['B', 'No. Tough crowd. Very snappy.', 'happy', 'normal'], ['N', '', 'happy', 'groan']] },
+            ['B', 'No. Tough crowd. Very snappy.', 'happy', 'normal'], ['N', 'Snappy! Hahaha!', 'happy', 'giggle']] },
   { lines: [['B', 'How do you throw a party in space?', 'normal', 'curious'], ['N', 'Ooh! How?', 'normal', 'wonder'],
-            ['B', 'You planet.', 'happy', 'normal'], ['N', 'Hehe, I love space.', 'happy', 'giggle']] },
+            ['B', 'You planet.', 'happy', 'normal'], ['N', 'Hehe! I love space.', 'happy', 'giggle']] },
   { lines: [['B', 'I\'ve bean thinking about decaf.', 'normal', 'normal'], ['N', 'And?', 'normal', 'curious'],
-            ['B', 'Not my cup of tea.', 'happy', 'groan']] },
+            ['B', 'Not my cup of tea.', 'happy', 'normal'], ['N', 'Hahaha! Bean!', 'happy', 'giggle']] },
   { lines: [['B', 'I\'m reading a book on anti-gravity.', 'normal', 'normal'], ['N', 'Is it good?', 'normal', 'curious'],
-            ['B', 'I can\'t put it down!', 'happy', 'normal'], ['N', '', 'happy', 'giggle']] },
+            ['B', 'I can\'t put it down!', 'happy', 'normal'], ['N', 'Hehehe!', 'happy', 'giggle']] },
   { lines: [['B', 'Why don\'t eggs tell jokes?', 'normal', 'curious'], ['N', 'Why?', 'normal', 'curious'],
-            ['B', 'They\'d crack each other up.', 'happy', 'giggle']] },
+            ['B', 'They\'d crack each other up.', 'happy', 'normal'], ['N', 'Hahaha! Like me!', 'happy', 'giggle']] },
   { lines: [['B', 'What do you call a sleepy dinosaur?', 'normal', 'curious'], ['N', 'What?', 'normal', 'curious'],
-            ['B', 'A dino-snore.', 'happy', 'normal'], ['N', 'Zzz… hehe', 'happy', 'giggle']] },
+            ['B', 'A dino-snore.', 'happy', 'normal'], ['N', 'Hehehe! Zzz…', 'happy', 'giggle']] },
   { lines: [['B', 'Why are teddy bears never hungry?', 'normal', 'curious'], ['N', 'Why?', 'normal', 'curious'],
-            ['B', 'They\'re always stuffed.', 'happy', 'normal'], ['N', 'Barry!', 'happy', 'giggle']] },
+            ['B', 'They\'re always stuffed.', 'happy', 'normal'], ['N', 'Hahaha! Barry!', 'happy', 'giggle']] },
   { lines: [['B', 'What\'s an alien\'s favourite drink?', 'normal', 'curious'], ['N', 'Ooh, what?', 'normal', 'wonder'],
-            ['B', 'Gravi-tea.', 'happy', 'normal'], ['N', '…accurate.', 'happy', 'happy']] },
+            ['B', 'Gravi-tea.', 'happy', 'normal'], ['N', 'Hehehe! Accurate.', 'happy', 'giggle']] },
   { lines: [['B', 'What do you call a lazy kangaroo?', 'normal', 'curious'], ['N', 'What?', 'normal', 'curious'],
-            ['B', 'A pouch potato!', 'happy', 'giggle']] },
+            ['B', 'A pouch potato!', 'happy', 'normal'], ['N', 'Hahaha!', 'happy', 'giggle']] },
   { lines: [['B', 'I\'d tell you a coffee joke…', 'normal', 'curious'], ['N', '…but?', 'normal', 'curious'],
-            ['B', 'It might be a latte to handle.', 'happy', 'groan']] },
+            ['B', 'It might be a latte to handle.', 'happy', 'normal'], ['N', 'Hehe! A latte!', 'happy', 'giggle']] },
   { lines: [['B', 'Why did the biscuit see a doctor?', 'normal', 'curious'], ['N', 'Why?', 'normal', 'curious'],
-            ['B', 'It was feeling crumby.', 'happy', 'groan']] },
+            ['B', 'It was feeling crumby.', 'happy', 'normal'], ['N', 'Hahaha!', 'happy', 'giggle']] },
   { lines: [['B', 'How does the moon cut its hair?', 'normal', 'curious'], ['N', 'How?', 'normal', 'curious'],
-            ['B', 'Eclipse it.', 'happy', 'normal'], ['N', '…oh no.', 'happy', 'groan']] },
+            ['B', 'Eclipse it.', 'happy', 'normal'], ['N', 'Hehehe! Eclipse!', 'happy', 'giggle']] },
   { lines: [['B', 'The Trash is my favourite app.', 'normal', 'o'], ['N', 'Why??', 'normal', 'o'],
-            ['B', 'It\'s always rubbish. Reliable.', 'happy', 'groan']] },
+            ['B', 'It\'s always rubbish. Reliable.', 'happy', 'normal'], ['N', 'Hahaha!', 'happy', 'giggle']] },
   { lines: [['B', 'Why did the scarecrow get an award?', 'normal', 'curious'], ['N', 'Why?', 'normal', 'curious'],
-            ['B', 'Outstanding in his field.', 'happy', 'giggle']] },
+            ['B', 'Outstanding in his field.', 'happy', 'normal'], ['N', 'Hehehe!', 'happy', 'giggle']] },
 
   // ---------------- Nom's big questions ----------------
   { lines: [['N', 'Barry… where do Zzzs go?', 'normal', 'wonder'], ['B', 'To the Zzz bank. For later.', 'sleepy', 'curious'],
