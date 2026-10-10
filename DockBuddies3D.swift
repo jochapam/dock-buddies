@@ -318,12 +318,51 @@ struct SettingsView: View {
 }
 
 /// A small floating card that can take clicks (for the birthday message).
+/// A comic-style speech bubble drawn natively above the buddies, so the words are crisp at any size.
+final class BubbleView: NSView {
+    var text = ""
+    var isBarry = true
+    var tailX: CGFloat = 30
+    static let tailH: CGFloat = 10
+    static let font: NSFont = {
+        let base = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        if let d = base.fontDescriptor.withDesign(.rounded), let f = NSFont(descriptor: d, size: 13) { return f }
+        return base
+    }()
+    var attributes: [NSAttributedString.Key: Any] {
+        let para = NSMutableParagraphStyle(); para.alignment = .center
+        let ink = isBarry ? NSColor(red: 0.35, green: 0.23, blue: 0.13, alpha: 1) : NSColor(red: 0.48, green: 0.14, blue: 0.33, alpha: 1)
+        return [.font: BubbleView.font, .foregroundColor: ink, .paragraphStyle: para]
+    }
+    /// The size needed for some words (at most about 210 points wide).
+    func fittingSize(for words: String) -> NSSize {
+        let r = (words as NSString).boundingRect(with: NSSize(width: 200, height: 400), options: [.usesLineFragmentOrigin], attributes: attributes)
+        return NSSize(width: ceil(r.width) + 24, height: ceil(r.height) + 14 + BubbleView.tailH)
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        let th = BubbleView.tailH
+        let body = NSRect(x: 1.5, y: th, width: bounds.width - 3, height: bounds.height - th - 1.5)
+        let edge = isBarry ? NSColor(red: 0.78, green: 0.6, blue: 0.43, alpha: 1) : NSColor(red: 0.94, green: 0.55, blue: 0.72, alpha: 1)
+        let rounded = NSBezierPath(roundedRect: body, xRadius: 12, yRadius: 12)
+        NSColor.white.setFill(); rounded.fill()
+        edge.setStroke(); rounded.lineWidth = 2; rounded.stroke()
+        let tx = min(max(tailX, 18), bounds.width - 18)
+        let tail = NSBezierPath()
+        tail.move(to: NSPoint(x: tx - 7, y: th + 2)); tail.line(to: NSPoint(x: tx, y: 0.5)); tail.line(to: NSPoint(x: tx + 7, y: th + 2)); tail.close()
+        NSColor.white.setFill(); tail.fill()
+        let sides = NSBezierPath()
+        sides.move(to: NSPoint(x: tx - 7, y: th + 1)); sides.line(to: NSPoint(x: tx, y: 0.5)); sides.line(to: NSPoint(x: tx + 7, y: th + 1))
+        sides.lineWidth = 2; edge.setStroke(); sides.stroke()
+        (text as NSString).draw(with: body.insetBy(dx: 12, dy: 7), options: [.usesLineFragmentOrigin], attributes: attributes)
+    }
+}
+
 final class CardPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMessageHandler {
     var panel: NSPanel!
     var webView: PassThroughWebView!
     var statusItem: NSStatusItem!
@@ -364,6 +403,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
 
         let config = WKWebViewConfiguration()
+        config.userContentController.add(self, name: "say")   // the scene asks for speech bubbles through this
         config.suppressesIncrementalRendering = true
         webView = PassThroughWebView(frame: NSRect(origin: .zero, size: panelSize()), configuration: config)
         webView.setValue(false, forKey: "drawsBackground")          // transparent behind the 3D scene
@@ -491,7 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // They do these by themselves now and then; this lets you ask for one.
         let doItem = menu.addItem(withTitle: "Ask Them To", action: nil, keyEquivalent: "")
         let doMenu = NSMenu()
-        for (title, name) in [("Make a Toast 🥂", "toast"), ("Cuddle Greg 🐊", "croc"), ("Have a Stretch", "stretch"), ("Read a Story 📖", "story"), ("Top Up the Coffee", "refill")] {
+        for (title, name) in [("Make a Toast 🥂", "toast"), ("Cuddle Greg 🐊", "croc"), ("Have a Stretch", "stretch"), ("Read a Story 📖", "story"), ("Top Up the Coffee", "refill"), ("Have a Chat 💬", "chat")] {
             let item = doMenu.addItem(withTitle: title, action: #selector(doActivity(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = name
@@ -768,7 +808,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         webView.evaluateJavaScript("window.doActivity && window.doActivity('\(name)')", completionHandler: nil)
     }
 
+    // MARK: Speech bubbles
+
+    var bubble: NSPanel?
+    var bubbleView: BubbleView?
+
+    /// From the scene: {show, who: "B"/"N", text, x, y} with x, y = where the speaker's head is, in window points from bottom-left.
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any] else { return }
+        let show = body["show"] as? Bool ?? false
+        guard show, panel.isVisible, let text = body["text"] as? String, !text.isEmpty else { bubble?.orderOut(nil); return }
+        let isBarry = (body["who"] as? String) == "B"
+        let x = CGFloat(body["x"] as? Double ?? 0), y = CGFloat(body["y"] as? Double ?? 0)
+        if bubble == nil {
+            let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 100, height: 40),
+                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = true
+            p.level = panel.level; p.collectionBehavior = panel.collectionBehavior
+            p.ignoresMouseEvents = true
+            let v = BubbleView(frame: p.contentView!.bounds); v.autoresizingMask = [.width, .height]
+            p.contentView = v
+            bubble = p; bubbleView = v
+        }
+        guard let p = bubble, let v = bubbleView else { return }
+        v.text = text; v.isBarry = isBarry
+        let size = v.fittingSize(for: text)
+        let anchor = NSPoint(x: panel.frame.minX + x, y: panel.frame.minY + min(y, panel.frame.height))
+        var origin = NSPoint(x: anchor.x - size.width / 2 + (isBarry ? -size.width * 0.25 : size.width * 0.25), y: anchor.y + 2)
+        if let s = (panel.screen ?? NSScreen.main)?.visibleFrame {
+            origin.x = min(max(origin.x, s.minX + 4), s.maxX - size.width - 4)
+            origin.y = min(origin.y, s.maxY - size.height - 4)
+        }
+        v.tailX = anchor.x - origin.x
+        p.setFrame(NSRect(origin: origin, size: size), display: true)
+        v.needsDisplay = true
+        p.orderFrontRegardless()
+    }
+
     @objc func toggleVisible() {
+        bubble?.orderOut(nil)
         if panel.isVisible {
             panel.orderOut(nil)
             toggleItem.title = "Show Buddies"

@@ -1,6 +1,7 @@
 // Dock Buddies 3D — plush bear and bunny, measured from the reference renders, with tufted shell fur.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { CHATS } from './chats.js';
 import * as S from './sculpt.js';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 
@@ -776,6 +777,34 @@ function bubbleTexture(i) {
   const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
 }
 const BUBBLES = DOODLES.map((_, i) => bubbleTexture(i));
+
+// Speech bubbles for their little chats: one spot above Nom, the tail pointing at whoever is talking
+const chatTex = new Map();
+function chatTexture(who, text) {
+  const key = who + text;
+  if (chatTex.has(key)) return chatTex.get(key);
+  const c = document.createElement('canvas'); c.width = 640; c.height = 300;
+  const g = c.getContext('2d');
+  g.font = '600 46px ui-rounded, "SF Pro Rounded", "Avenir Next", system-ui, sans-serif';
+  // wrap to at most two lines
+  const words = text.split(' '), lines = [''];
+  for (const w of words) { const tryL = lines[lines.length - 1] ? lines[lines.length - 1] + ' ' + w : w; if (g.measureText(tryL).width > 540 && lines[lines.length - 1]) lines.push(w); else lines[lines.length - 1] = tryL; }
+  const w = Math.min(600, Math.max(...lines.map(l => g.measureText(l).width)) + 70), h = 60 + lines.length * 56;
+  const x0 = (640 - w) / 2, y0 = 10;
+  g.fillStyle = '#ffffff'; g.strokeStyle = who === 'B' ? '#c79a6e' : '#f08cb8'; g.lineWidth = 6;
+  g.beginPath(); g.roundRect(x0, y0, w, h, 40); g.fill(); g.stroke();
+  // tail: down-left towards Nom, down-right towards Barry
+  const tx = who === 'B' ? x0 + w - 70 : x0 + 90, dir = who === 'B' ? 1 : -1;
+  g.beginPath(); g.moveTo(tx - 24, y0 + h - 3); g.lineTo(tx + dir * 48, y0 + h + 52); g.lineTo(tx + 24, y0 + h - 3); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(tx - 24, y0 + h); g.lineTo(tx + dir * 48, y0 + h + 52); g.lineTo(tx + 24, y0 + h); g.stroke();
+  g.fillStyle = '#ffffff'; g.fillRect(tx - 21, y0 + h - 8, 42, 10);
+  g.fillStyle = who === 'B' ? '#5a3b22' : '#7a2453'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  lines.forEach((l, i) => g.fillText(l, 320, y0 + 36 + 28 + i * 56 - (lines.length === 1 ? 6 : 0)));
+  const tx2 = new THREE.CanvasTexture(c); tx2.colorSpace = THREE.SRGBColorSpace; tx2.anisotropy = 4;
+  chatTex.set(key, tx2); return tx2;
+}
+const chatBubble = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
+chatBubble.visible = false; chatBubble.renderOrder = 10; scene.add(chatBubble);
 const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: BUBBLES[0], transparent: true, depthWrite: false }));
 bubble.visible = false; scene.add(bubble);
 
@@ -924,9 +953,26 @@ const D = { sleep: params.has('preview') || params.has('rest') ? 0 : 1,   // the
 // Little things they do now and then while awake (one every 4-8 minutes), in this order.
 const ACTS = ['toast', 'croc', 'refill', 'story', 'stretch', 'toast', 'croc', 'refill', 'toast', 'story', 'stretch'];
 const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 13.5 };
-const MUG_MOVE = 1.6;    // seconds to bend down and put a mug on the floor (or pick it up)
+const MUG_MOVE = 1.6;
+const CHAT_TIMES = sipSchedule(97531, 420, 720, 1080);   // a chat every 12-18 minutes (the first after ~7 min)
+/** how long a line stays up: long enough to read it */
+const lineLength = (ln) => ln[1] ? 1.6 + 0.065 * ln[1].length : 1.6;
+/** a chat that fits the moment, not one heard recently (time-of-day ones get first go) */
+function pickChat() {
+  const n = new Date();
+  const c = { hour: n.getHours(), day: n.getDay(), month: n.getMonth(), date: n.getDate(),
+              activeMin: D.activeSince == null ? 0 : (performance.now() - D.activeSince) / 60000 };
+  D.heard = D.heard || [];
+  const fits = CHATS.filter(x => !x.when || x.when(c));
+  let fresh = fits.filter(x => !D.heard.includes(x));
+  if (!fresh.length) { D.heard = []; fresh = fits; }
+  const timely = fresh.filter(x => x.when && Math.random() < 0.6);
+  const pool = timely.length ? timely : fresh;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  D.heard.push(pick); return pick;
+}    // seconds to bend down and put a mug on the floor (or pick it up)
 const ACT_TIMES = sipSchedule(13579, 150, 240, 480);
-window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; };
+window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'chat') D.chatNow = true; };
 let lastActivityMs = performance.now();
 window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
@@ -1035,6 +1081,29 @@ function direct(t) {
   const waveN = waveT < 3.2 ? smooth(Math.min(waveT / 0.35, (3.2 - waveT) / 0.35)) : 0;
   const waveB = (D.barryJoin || params.has('wave')) && waveT < 4.2 ? smooth(Math.min((waveT - 1.2) / 0.4, (4.2 - waveT) / 0.4)) : 0;
 
+  // little chats: about every 15 minutes, when they're not busy with something else
+  const nowMs = performance.now();
+  if (nowMs - mouseMovedAt > 5 * 60000) D.activeSince = null; else if (D.activeSince == null) D.activeSince = nowMs;
+  if (!params.has('preview') && !params.has('rest') && lastStart(t, CHAT_TIMES).since < 0.1) D.chatDueAt = t;
+  const freeToChat = !act && D.sleep < 0.05 && bdayT === Infinity && wakeT > 6 && D.bMug < 0.05 && D.nMug < 0.05 && !(waveT < 4.5);
+  if ((D.chatNow || (D.chatDueAt != null && t - D.chatDueAt < 120)) && freeToChat && !D.chat) {
+    D.chat = { conv: pickChat(), start: t }; D.chatNow = false; D.chatDueAt = null;
+  }
+  if (params.has('chat')) D.chat = { conv: CHATS[+params.get('chat')], start: t - +(params.get('ct') || 0) };
+  let chat = null;
+  if (D.chat) {
+    if (act || D.sleep > 0.1) D.chat = null;                     // something else came up
+    else {
+      let ct = t - D.chat.start;
+      for (const ln of D.chat.conv.lines) {
+        const len = lineLength(ln);
+        if (ct < len) { chat = { who: ln[0], text: ln[1], bFace: ln[2] || 'normal', nFace: ln[3] || 'normal', lineT: ct, len }; break; }
+        ct -= len;
+      }
+      if (!chat && !params.has('chat')) { if (D.chat.conv.then) D.pendingAct = D.chat.conv.then; D.chat = null; }
+    }
+  }
+
   const toastT = act === 'toast' ? actT : Infinity;
   const toastTurn = toastT < 5 ? smooth(Math.min(toastT / 1.0, (5 - toastT) / 1.0)) : 0;
   const toastRaise = toastT < 5 ? Math.max(0.5 * smooth(Math.min((toastT - 0.4) / 0.8, (4.2 - toastT) / 0.6)),
@@ -1043,7 +1112,7 @@ function direct(t) {
   return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
            stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
            toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze,
-           pot: D.pot || 0, pourBarry, pourNom, holdOut, waveN, waveB, waveT, dt };
+           pot: D.pot || 0, pourBarry, pourNom, holdOut, chat, waveN, waveB, waveT, dt };
 }
 const BDAY_LEN = 22;
 
@@ -1153,7 +1222,8 @@ function pose(t) {
   bearFloor.position.set(...lerp3([0, 0.24, 1.55], [-0.48, 0.24, 1.68], D.bSide || 0));
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
   // reading aloud: little mouth movements in bursts, like words
-  const talk = W.reading && W.pageT > 0.9 && W.pageT < 4.4 ? Math.max(0, Math.sin(t * 11)) * (0.5 + 0.5 * Math.sin(t * 2.3)) : 0;
+  const chatting = W.chat && W.chat.who === 'B' && W.chat.text && W.chat.lineT < W.chat.len - 0.5;
+  const talk = (W.reading && W.pageT > 0.9 && W.pageT < 4.4) || chatting ? Math.max(0, Math.sin(t * 11)) * (0.5 + 0.5 * Math.sin(t * 2.3)) : 0;
   // coffee level: goes down a little with every sip, back up when Nom pours
   D.bLevel = Math.min(1, Math.max(0.22, (D.bLevel ?? 1) - (bs > 0.9 && W.toastRaise === 0 ? W.dt * 0.05 : 0) + (W.pourBarry > 0.6 ? W.dt * 0.4 : 0)));
   bearMug.userData.setLevel(D.bLevel);
@@ -1178,6 +1248,27 @@ function pose(t) {
     if (ft >= 1 - 1e-6) bookR.userData.face.material.map = PAGES[(k + 4) % PAGES.length];
     for (const m of [bookL.userData.face.material, bookR.userData.face.material, flipFront.material, flipBack.material]) m.needsUpdate = true;
   }
+  // chat bubbles: in the app they're drawn natively above the buddies (crisp text); here as a fallback
+  const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.say;
+  const lineKey = W.chat && W.chat.text && W.chat.lineT < W.chat.len - 0.25 ? W.chat.who + W.chat.text : null;
+  if (native && lineKey !== D.saidKey) {
+    D.saidKey = lineKey;
+    if (lineKey) {
+      bearBody.updateMatrixWorld(true); alienBody.updateMatrixWorld(true); camera.updateMatrixWorld();
+      const head = W.chat.who === 'B' ? bearBody.localToWorld(_eyePos.set(-0.35, 2.7, 0.4)) : alienBody.localToWorld(_eyePos.set(0.1, 1.62, 0.3));
+      head.project(camera);
+      native.postMessage({ show: true, who: W.chat.who, text: W.chat.text,
+                           x: (head.x + 1) / 2 * window.innerWidth, y: (head.y + 1) / 2 * window.innerHeight });
+    } else native.postMessage({ show: false });
+  }
+  if (!native && W.chat && W.chat.text) {
+    const c = W.chat, a = smooth(Math.min(c.lineT / 0.18, (c.len - c.lineT) / 0.3));
+    chatBubble.visible = a > 0.01;
+    chatBubble.material.map = chatTexture(c.who, c.text); chatBubble.material.opacity = a;
+    const sz = 1.0 * (0.85 + 0.15 * smooth(c.lineT / 0.25));
+    chatBubble.scale.set(1.7 * sz, 1.7 * sz * 300 / 640, 1);
+    chatBubble.position.set(-1.35, 2.42, 1.2);
+  } else chatBubble.visible = false;
   // a speech bubble with the picture he's describing
   const bub = W.reading ? smooth(Math.min((W.pageT - 0.9) / 0.4, (4.3 - W.pageT) / 0.4)) : 0;
   bubble.visible = bub > 0.01;
@@ -1186,8 +1277,9 @@ function pose(t) {
     bubble.position.set(-1.25, 2.5, 1.0);               // in the space above Nom, its tail pointing at Barry
     const sz = 0.7 * (0.7 + 0.3 * bub); bubble.scale.set(sz, sz, sz); bubble.material.opacity = bub;
   }
-  const happy = (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5 && W.holdOut < 0.5) || W.waveB > 0.5 || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
-  const sleepy = !happy && (zz > 0.5 || blinking(t, 4.7, 1));
+  const bFace = W.chat ? W.chat.bFace : 'normal';
+  const happy = (bFace === 'happy' && !chatting) || (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5 && W.holdOut < 0.5) || W.waveB > 0.5 || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
+  const sleepy = !happy && (zz > 0.5 || bFace === 'sleepy' || blinking(t, 4.7, 1));
   bearEyes.forEach((e, i) => {
     e.visible = !happy && !sleepy;
     // his eyes follow your pointer too (a small shift on his face)
@@ -1199,6 +1291,7 @@ function pose(t) {
       const dx = mouse.x - ex, dy = -(mouse.y - ey), d = Math.hypot(dx, dy) || 1, m = 0.035 * Math.min(1, d / 120);
       ox = dx / d * m; oy = dy / d * m;
     }
+    if (bFace === 'wonder') { ox = 0.012 * (i ? 1 : -1); oy = 0.035; }   // gazing upwards
     const x = (i ? 1 : -1) * EYE.x + ox, y = EYE.y + oy;
     e.position.set(x, y, fz(Math.abs(x), y));
   });
@@ -1249,6 +1342,9 @@ function pose(t) {
   const cuddle = W.croc > 0.95 && W.sleep < 0.3 && W.bookOut < 0.5;     // awake and hugging the crocodile
   const nz = Math.max(zz, W.doze);                   // asleep, or dozing off during the story
   if (W.party > 0.3 || W.thanks > 0.3) { mood = 'giggle'; moodT = (W.thanks > 0.3 ? t : W.bdayT) % 3.6; }   // giggly on birthdays
+  const nFace = W.chat ? W.chat.nFace : null;
+  if (nFace) { mood = { curious: 'curious', wonder: 'curious', giggle: 'giggle', sleepy: 'sleepy', groan: 'sleepy' }[nFace] || null; moodT = 1.5 + (nFace === 'giggle' ? W.chat.lineT % 1.8 : 0); }
+  const nomTalking = W.chat && W.chat.who === 'N' && W.chat.text && W.chat.lineT < W.chat.len - 0.5;
   const ease = mood ? smooth(Math.min(moodT / 0.4, (3.6 - moodT) / 0.4)) : 0;   // fade in and out
 
   const hp = t % 5;
@@ -1258,7 +1354,8 @@ function pose(t) {
   let tilt = params.has('rest') ? 0 : 0.035 * Math.sin(t * 1.3);
   if (mood === 'curious') tilt += 0.14 * ease;                  // head tilt
   if (mood === 'sleepy') tilt += 0.07 * ease * Math.sin(moodT * 1.2);   // slow, dozy sway
-  if (cuddle) tilt += 0.09 * Math.sin(t * 2.2);              // rocking the crocodile side to side
+  if (cuddle) tilt += 0.09 * Math.sin(t * 2.2);
+  if (nFace === 'groan') tilt += 0.05 * Math.sin(t * 9) * Math.max(0, 1 - W.chat.lineT / 1.2);   // a little head shake              // rocking the crocodile side to side
   tilt -= 0.07 * W.toastTurn + 0.12 * W.pourBarry;            // leans in for a toast, or to pour for Barry
   if (W.waveN > 0) tilt += 0.05 * Math.sin(W.waveT * 12.5) * W.waveN;   // wiggles as it waves
   alienBody.rotation.z = tilt * (1 - nz) - 0.17 * nz;   // asleep: leans over onto Barry
@@ -1346,7 +1443,7 @@ function pose(t) {
   const gp = t % 13, glance = !params.has('rest') && !mood && gp > 5 && gp < 7;
   const sipping = us > 0.5;
   const mmm = params.get('expr') === 'content' || (!mood && afterSip && sinceSip < 4.8);   // eyes stay happily closed just after a sip
-  const happyEyes = nz < 0.5 && (W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
+  const happyEyes = nz < 0.5 && ((nFace === 'happy' && !nomTalking) || W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
   const sleepyEyes = nz > 0.5 || mood === 'sleepy' || (blink && !happyEyes);
   const wide = mood === 'curious' ? 1 + 0.15 * ease : 1;
   alienEyes.forEach(({ white, pupil, s, sleepy, happy }) => {
@@ -1357,6 +1454,7 @@ function pose(t) {
     if (W.bookOut > 0.5) placePupil(pupil, 0.08, -0.03);                      // looking at the pictures in the book
     else if (W.pourNom > 0.3) placePupil(pupil, 0, -0.1);                      // watching its own mug fill up
     else if (watchingMouse() && W.sleep < 0.3) lookAtMouse(white, pupil);          // following your mouse pointer
+    else if (nFace === 'wonder') placePupil(pupil, -s * 0.02, 0.1);   // gazing up at the big questions
     else if (mood === 'curious') placePupil(pupil, 0, 0.05);  // looking straight up, wondering
     else if (glance) placePupil(pupil, 0.09, 0.04);
     else placePupil(pupil, -s * 0.06, 0.035);                 // a bright, slightly upward gaze
@@ -1365,6 +1463,9 @@ function pose(t) {
   // mouth: closed while drinking and for a while after, a small "o" when curious, a smile when giggly or sleepy
   mouthO.scale.set(0.045 * (1 + 0.6 * W.nomYawn), 0.055 * (1 + 1.3 * W.nomYawn), 0.02);
   if (W.nomYawn > 0.05) setMouth('o');                       // a big yawn
+  else if (nomTalking) setMouth(Math.sin(t * 13) > 0 ? 'o' : 'smile');   // chatting away
+  else if (nFace === 'o') setMouth('o');
+  else if (nFace === 'groan') setMouth('smile');
   else if (nz > 0.3 || cuddle || W.bookOut > 0.5) setMouth('smile');
   else if (mood === 'curious') setMouth('o');
   else if (mood === 'giggle' || mood === 'sleepy' || afterSip || us > 0.3 || params.get('expr') === 'content') setMouth('smile');
