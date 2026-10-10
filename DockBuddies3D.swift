@@ -12,6 +12,7 @@ import AppKit
 import WebKit
 import SwiftUI
 import ServiceManagement
+import AVFoundation
 
 /// The scene is drawn for a 460 × 340 frame; the window keeps that shape at every size.
 let aspect: CGFloat = 340.0 / 460.0
@@ -148,6 +149,8 @@ final class SettingsModel: ObservableObject {
     @Published var thanked: Bool
     @Published var openAtLogin: Bool { didSet { if openAtLogin != oldValue { setOpenAtLogin(openAtLogin) } } }
     @Published var loginNote = ""
+    @Published var jam: Bool { didSet { if jam != oldValue { d.set(jam, forKey: AppDelegate.jamKey); app?.setJam(jam) } } }
+    @Published var jamNote = ""
     @Published var screenID: Int { didSet { if screenID != oldValue && !syncing { app?.moveToScreen(screenID) } } }
     var syncing = false
     @Published var onDock: Bool { didSet { d.set(onDock, forKey: AppDelegate.onDockKey); app?.reposition() } }
@@ -159,7 +162,8 @@ final class SettingsModel: ObservableObject {
         }
         if let app {                              // show where they actually are, without moving them
             syncing = true
-            screenID = AppDelegate.displayID(app.targetScreen())
+            jam = d.bool(forKey: AppDelegate.jamKey)
+        screenID = AppDelegate.displayID(app.targetScreen())
             syncing = false
         }
     }
@@ -233,6 +237,21 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
                 }
+            }
+
+            GroupBox(label: Text("Music").font(.headline)) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Jam along when music is playing", isOn: $model.jam)
+                    Text("Listens through the microphone to hear when music is on. Only the loudness and the beat are worked out, right here on this Mac: nothing is recorded, kept or sent anywhere.")
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !model.jamNote.isEmpty {
+                        Text(model.jamNote).font(.caption).foregroundColor(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
             }
 
             GroupBox(label: Text("Size").font(.headline)) {
@@ -318,6 +337,83 @@ struct SettingsView: View {
 }
 
 /// A small floating card that can take clicks (for the birthday message).
+/// Listens through the microphone (only when switched on in Settings) to tell whether music is playing,
+/// how loud it is and when the beats land, so Barry and Nom can jam along. Nothing is recorded, kept or sent:
+/// each tiny slice of sound is reduced to a loudness number and thrown away.
+final class MusicListener {
+    private let engine = AVAudioEngine()
+    private(set) var running = false
+    private let lock = NSLock()
+    private var isMusic = false, level: Float = 0, beatPending = false, bpm: Double = 0
+    private var energies: [Float] = []          // the last ~0.5 s of loudness readings
+    private var sustained: [Bool] = []          // the last ~4 s: was there sound?
+    private var onsets: [Double] = []           // when recent beats landed
+    private var lastOnset = 0.0, musicSince = 0.0, quietSince = 0.0
+    private var noiseFloor: Float = 0.002
+
+    func start() -> Bool {
+        if running { return true }
+        let input = engine.inputNode
+        let fmt = input.outputFormat(forBus: 0)
+        guard fmt.sampleRate > 0, fmt.channelCount > 0 else { return false }
+        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] buffer, _ in self?.process(buffer) }
+        do { try engine.start(); running = true; return true } catch { input.removeTap(onBus: 0); return false }
+    }
+
+    func stop() {
+        guard running else { return }
+        engine.inputNode.removeTap(onBus: 0); engine.stop(); running = false
+        lock.lock(); isMusic = false; level = 0; onsets.removeAll(); lock.unlock()
+    }
+
+    private func process(_ buffer: AVAudioPCMBuffer) {
+        guard let ch = buffer.floatChannelData?[0] else { return }
+        let n = Int(buffer.frameLength)
+        if n == 0 { return }
+        var sum: Float = 0
+        for i in 0..<n { sum += ch[i] * ch[i] }
+        let rms = (sum / Float(n)).squareRoot()
+        let now = CFAbsoluteTimeGetCurrent()
+        lock.lock(); defer { lock.unlock() }
+        noiseFloor = rms < noiseFloor ? rms : noiseFloor + (rms - noiseFloor) * 0.0005   // slowly follows the room's quiet level
+        energies.append(rms); if energies.count > 22 { energies.removeFirst() }
+        let avg = energies.reduce(0, +) / Float(energies.count)
+        level = min(1, rms * 8)
+        sustained.append(rms > max(noiseFloor * 3, 0.004)); if sustained.count > 170 { sustained.removeFirst() }
+        // a beat: a jump well above the recent average, not too soon after the last one
+        if rms > avg * 1.45 && rms > noiseFloor * 4 && rms > 0.01 && now - lastOnset > 0.22 {
+            lastOnset = now; onsets.append(now); beatPending = true
+        }
+        onsets.removeAll { now - $0 > 8 }
+        // music: loud enough, almost no pauses (talking has lots), and a steady stream of beats
+        let loud = avg > max(noiseFloor * 5, 0.008)
+        let filled = Double(sustained.filter { $0 }.count) / Double(max(1, sustained.count))
+        let rate = Double(onsets.count) / 8
+        let musical = loud && filled > 0.85 && rate > 0.9 && rate < 5
+        if musical { quietSince = 0; if musicSince == 0 { musicSince = now } }
+        else { if quietSince == 0 { quietSince = now }; if now - quietSince > 1.5 { musicSince = 0 } }
+        if !isMusic && musicSince > 0 && now - musicSince > 5 { isMusic = true }        // 5 s of music: start jamming
+        if isMusic && quietSince > 0 && now - quietSince > 8 { isMusic = false }        // 8 s without: stop
+        if onsets.count > 4 {                                                            // tempo from the gaps between beats
+            var gaps: [Double] = []
+            for i in 1..<onsets.count { gaps.append(onsets[i] - onsets[i - 1]) }
+            gaps.sort()
+            var g = gaps[gaps.count / 2]
+            while g < 0.4 { g *= 2 }
+            while g > 1.0 { g /= 2 }
+            bpm = 60 / g
+        }
+    }
+
+    /// The latest reading, and whether a beat has landed since the last time we asked.
+    func read() -> (music: Bool, level: Float, beat: Bool, bpm: Double) {
+        lock.lock(); defer { lock.unlock() }
+        let r = (isMusic, level, beatPending, bpm)
+        beatPending = false
+        return r
+    }
+}
+
 /// A comic-style speech bubble drawn natively above the buddies, so the words are crisp at any size.
 final class BubbleView: NSView {
     var text = ""
@@ -376,6 +472,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
     var settingsModel: SettingsModel?
     var nextScreenItem: NSMenuItem!
     var updating = false
+    let listener = MusicListener()
+    var musicWasOn = false
+    static let jamKey = "DockBuddiesJam"
     var card: CardPanel?
     var cardTimer: Timer?
     var lastBirthdayShown: Date?
@@ -453,6 +552,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
 
         // Birthday: check shortly after start, then every 30 seconds.
         Timer.scheduledTimer(timeInterval: 4, target: self, selector: #selector(checkBirthday), userInfo: nil, repeats: false)
+        if UserDefaults.standard.bool(forKey: AppDelegate.jamKey) { setJam(true) }
         Timer.scheduledTimer(timeInterval: 30, target: self, selector: #selector(checkBirthday), userInfo: nil, repeats: true)
 
         // Updates: a minute after start, then every few hours.
@@ -531,7 +631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         // They do these by themselves now and then; this lets you ask for one.
         let doItem = menu.addItem(withTitle: "Ask Them To", action: nil, keyEquivalent: "")
         let doMenu = NSMenu()
-        for (title, name) in [("Make a Toast 🥂", "toast"), ("Cuddle Greg 🐊", "croc"), ("Have a Stretch", "stretch"), ("Read a Story 📖", "story"), ("Top Up the Coffee", "refill"), ("Have a Chat 💬", "chat")] {
+        for (title, name) in [("Make a Toast 🥂", "toast"), ("Cuddle Greg 🐊", "croc"), ("Have a Stretch", "stretch"), ("Read a Story 📖", "story"), ("Top Up the Coffee", "refill"), ("Have a Chat 💬", "chat"), ("Movie Night 🍿", "movie")] {
             let item = doMenu.addItem(withTitle: title, action: #selector(doActivity(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = name
@@ -606,6 +706,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
 
     @objc func sendMouse() {
         guard panel.isVisible else { return }
+        if listener.running {                       // music news for the scene: on/off, loudness, beats
+            let r = listener.read()
+            if r.music || musicWasOn {
+                webView.evaluateJavaScript("window.setMusic && window.setMusic(\(r.music), \(r.level), \(r.beat), \(r.bpm))", completionHandler: nil)
+            }
+            musicWasOn = r.music
+        }
         let m = NSEvent.mouseLocation
         let f = panel.frame
         let p = NSPoint(x: m.x - f.minX, y: m.y - f.minY)   // relative to the window, from its bottom-left
@@ -806,6 +913,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         guard let name = sender.representedObject as? String else { return }
         if !panel.isVisible { toggleVisible() }
         webView.evaluateJavaScript("window.doActivity && window.doActivity('\(name)')", completionHandler: nil)
+    }
+
+    // MARK: Music
+
+    /// Switch listening on or off (asks for the microphone the first time).
+    func setJam(_ on: Bool) {
+        guard on else {
+            listener.stop(); musicWasOn = false
+            webView.evaluateJavaScript("window.setMusic && window.setMusic(false, 0, false, 0)", completionHandler: nil)
+            return
+        }
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            if !listener.start() { settingsModel?.jamNote = "Couldn't open the microphone." }
+            else { settingsModel?.jamNote = "" }
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                Task { @MainActor in
+                    if granted { _ = self.listener.start(); self.settingsModel?.jamNote = "" }
+                    else { self.settingsModel?.jamNote = "Microphone access was turned down. You can allow it in System Settings → Privacy & Security → Microphone." }
+                }
+            }
+        default:
+            settingsModel?.jamNote = "Allow Dock Buddies in System Settings → Privacy & Security → Microphone, then switch this on again."
+        }
     }
 
     // MARK: Speech bubbles

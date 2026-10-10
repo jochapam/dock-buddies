@@ -712,6 +712,86 @@ function puffTexEarly() {
 }
 pumpkin.visible = false;
 const batMat = new THREE.MeshBasicMaterial({ color: 0x2b2233, side: THREE.DoubleSide });
+// =====================================================================
+// Movie night: a little TV on the floor at the front right, facing them; popcorn in Barry's arms
+// =====================================================================
+const tv = new THREE.Group(); scene.add(tv);
+tv.position.set(1.3, 0, 1.95); tv.rotation.y = -1.3;     // turned towards the two of them (we see the screen side-on)
+const tvScreenMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+{
+  const shell = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.46, 0.4, 3, 0.07), new THREE.MeshToonMaterial({ color: 0x7fb7a6, gradientMap: TOON_BANDS.cel }));
+  shell.position.y = 0.33; tv.add(shell);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.32), tvScreenMat); scr.position.set(-0.03, 0.34, 0.202); tv.add(scr);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), M.black); knob.position.set(0.25, 0.4, 0.2); tv.add(knob);
+  for (const s of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.015, 0.12, 8), M.black); leg.position.set(s * 0.22, 0.06, 0); tv.add(leg);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.36, 6), M.black);
+    ant.position.set(s * 0.07, 0.68, 0); ant.rotation.z = -s * 0.5; tv.add(ant);
+  }
+}
+const tvGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTexEarly(), transparent: true, depthWrite: false, opacity: 0, toneMapped: false }));
+tvGlow.position.set(-0.03, 0.36, 0.35); tvGlow.scale.set(1.1, 0.8, 1); tv.add(tvGlow);
+const tvLight = new THREE.PointLight(0x88aaff, 0, 5, 1.2); tvLight.position.set(0, 0.5, 0.6); tv.add(tvLight);
+tv.visible = false;
+
+const popcorn = new THREE.Group(); bearArms.add(popcorn);
+popcorn.position.set(...BA([0, 1.0, 1.28]));
+{
+  const prof = [[0, -0.1], [0.2, -0.1], [0.27, 0.0], [0.3, 0.1], [0.28, 0.1]].map(([x, y]) => new THREE.Vector2(x, y));
+  const c = document.createElement('canvas'); c.width = 64; c.height = 8; const g = c.getContext('2d');
+  for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#ffffff' : '#e8473c'; g.fillRect(i * 8, 0, 8, 8); }
+  const stripes = new THREE.CanvasTexture(c); stripes.colorSpace = THREE.SRGBColorSpace; stripes.wrapS = THREE.RepeatWrapping; stripes.repeat.x = 3;
+  popcorn.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 32), new THREE.MeshToonMaterial({ map: stripes, gradientMap: TOON_BANDS.cel, side: THREE.DoubleSide })));
+  const kernelMat = new THREE.MeshToonMaterial({ color: 0xfff1c2, gradientMap: TOON_BANDS.cel });
+  for (let i = 0; i < 22; i++) {
+    const a = i * 2.4, r = 0.2 * Math.sqrt((i + 0.5) / 22);
+    const k = new THREE.Mesh(new THREE.IcosahedronGeometry(0.05, 0), kernelMat);
+    k.position.set(Math.cos(a) * r, 0.1 + 0.07 * (1 - r / 0.2), Math.sin(a) * r); k.rotation.set(i, i * 2, 0); popcorn.add(k);
+  }
+}
+popcorn.visible = false;
+const flyKernel = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), new THREE.MeshToonMaterial({ color: 0xfff1c2, gradientMap: TOON_BANDS.cel }));
+flyKernel.visible = false; scene.add(flyKernel);
+
+// =====================================================================
+// Jamming along to music: a tambourine for Barry, maracas for Nom, and notes floating up
+// =====================================================================
+const gold = new THREE.MeshToonMaterial({ color: 0xe3a33d, gradientMap: TOON_BANDS.cel });
+const tambourine = new THREE.Group(); bearArms.add(tambourine);
+tambourine.position.set(...BA([0, 1.1, 1.3]));
+{
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.07, 32, 1, true), new THREE.MeshToonMaterial({ color: 0xb5562f, gradientMap: TOON_BANDS.cel, side: THREE.DoubleSide }));
+  ring.rotation.x = Math.PI / 2; tambourine.add(ring);
+  const skin = new THREE.Mesh(new THREE.CircleGeometry(0.255, 32), new THREE.MeshToonMaterial({ color: 0xf6ead2, gradientMap: TOON_BANDS.cel, side: THREE.DoubleSide }));
+  skin.position.z = -0.03; tambourine.add(skin);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2, j = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.02, 14), gold);
+    j.position.set(Math.cos(a) * 0.27, Math.sin(a) * 0.27, 0.02); j.rotation.x = Math.PI / 2; tambourine.add(j);
+  }
+}
+tambourine.visible = false;
+const maracas = [-1, 1].map(s => {
+  const g = new THREE.Group(); alienArms.add(g);
+  g.position.set(...UA([s * 0.3, 0.5, 0.5]));
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 16), new THREE.MeshToonMaterial({ color: s < 0 ? 0x5cc6c9 : 0xffd34d, gradientMap: TOON_BANDS.cel }));
+  head.position.y = 0.17; head.scale.set(1, 1.15, 1); g.add(head);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.014, 8, 24), new THREE.MeshToonMaterial({ color: 0xff6b9a, gradientMap: TOON_BANDS.cel }));
+  band.position.y = 0.17; band.rotation.x = Math.PI / 2; g.add(band);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 0.16, 10), new THREE.MeshToonMaterial({ color: 0x9a6338, gradientMap: TOON_BANDS.cel }));
+  handle.position.y = 0.04; g.add(handle);
+  g.rotation.z = -s * 0.25; g.visible = false; return g;
+});
+const noteTex = ['♪', '♫'].map(ch => {
+  const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d');
+  g.font = 'bold 78px "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 8; g.strokeStyle = 'rgba(255,255,255,0.95)'; g.strokeText(ch, 48, 52); g.fillStyle = '#7a4fc9'; g.fillText(ch, 48, 52);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+});
+const notes = Array.from({ length: 6 }, (_, i) => {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: noteTex[i % 2], transparent: true, depthWrite: false, toneMapped: false }));
+  sp.visible = false; sp.userData = { born: -1e9, x: 0 }; scene.add(sp); return sp;
+});
+
 const bats = [0, 1].map(() => {
   const b = new THREE.Group();
   b.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), batMat));
@@ -952,7 +1032,7 @@ const D = { sleep: params.has('preview') || params.has('rest') ? 0 : 1,   // the
             pendingAct: null, actStart: null, act: null, pot: 0, waveStart: null, lastWave: -1e9, wasNear: false, barryJoin: false };
 // Little things they do now and then while awake (one every 4-8 minutes), in this order.
 const ACTS = ['toast', 'croc', 'refill', 'story', 'stretch', 'toast', 'croc', 'refill', 'toast', 'story', 'stretch'];
-const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 13.5 };
+const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 13.5, movie: 62 };
 const MUG_MOVE = 1.6;
 const CHAT_TIMES = sipSchedule(97531, 420, 720, 1080);   // a chat every 12-18 minutes (the first after ~7 min)
 /** how long a line stays up: long enough to read it */
@@ -972,12 +1052,21 @@ function pickChat() {
   D.heard.push(pick); return pick;
 }    // seconds to bend down and put a mug on the floor (or pick it up)
 const ACT_TIMES = sipSchedule(13579, 150, 240, 480);
+// Music: the app listens (only if you allow it in Settings) and tells us roughly how loud it is and when the beats land
+const MUSIC = { on: false, level: 0, lastBeat: -1e9, bpm: 110 };
+window.setMusic = (on, level, beat, bpm) => {
+  MUSIC.on = !!on; MUSIC.level = level || 0;
+  if (beat) MUSIC.lastBeat = performance.now();
+  if (bpm > 40 && bpm < 220) MUSIC.bpm = bpm;
+  if (on) lastActivityMs = performance.now();               // music wakes them up and keeps them awake
+};
 window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'chat') D.chatNow = true; };
 let lastActivityMs = performance.now();
 window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
 window.setBirthdayDay = (on) => { D.hats = !!on; };
 function wantsSleep() {
+  if (MUSIC.on) return false;
   if (params.has('sleep')) return true;
   if (params.has('preview') || params.has('rest')) return false;
   const idleMin = (performance.now() - Math.max(lastActivityMs, mouseMovedAt)) / 60000;
@@ -1012,29 +1101,38 @@ function direct(t) {
   if (params.has('act')) { act = params.get('act'); actT = +(params.get('at') || 0); }
   else {
     if (D.pendingAct) { D.act = D.pendingAct; D.actStart = t; D.pendingAct = null; }
-    else if (!params.has('preview') && !params.has('rest') && D.sleep < 0.01 && bdayT === Infinity && wakeT > 8) {
+    else if (!params.has('preview') && !params.has('rest') && D.sleep < 0.01 && bdayT === Infinity && wakeT > 8 && !MUSIC.on) {
       const a = lastStart(t, ACT_TIMES);
       if (a.since < 0.1 && D.act === null) {
         D.act = ACTS[a.i % ACTS.length]; D.actStart = t;
         if (Math.min(D.bLevel ?? 1, D.nLevel ?? 1) < 0.4) D.act = 'refill';   // running low: time for a top-up
-        // in the evening, story time is the favourite (at most once an hour)
-        const h = new Date().getHours();
-        if ((h >= 19 || h < 5) && (D.lastStory === undefined || t - D.lastStory > 3600)) D.act = 'story';
-        if (D.act === 'story') D.lastStory = t;
+        // evenings: story time or movie night (taking turns, about once an hour);
+        // weekend daytime: a movie now and then (every couple of hours)
+        const now = new Date(), h = now.getHours(), wd = now.getDay();
+        if ((h >= 19 || h < 5) && t - (D.lastCosy ?? -1e9) > 3600) { D.act = D.cosyFlip ? 'movie' : 'story'; D.cosyFlip = !D.cosyFlip; D.lastCosy = t; }
+        else if ((wd === 0 || wd === 6) && h >= 10 && h < 17 && t - (D.lastMovie ?? -1e9) > 7200) D.act = 'movie';
+        if (D.act === 'movie') D.lastMovie = t;
       }
     }
     if (D.act) { actT = t - D.actStart; act = D.act; if (actT > ACT_LEN[act] || D.sleep > 0.3) { D.act = null; act = null; actT = Infinity; } }
   }
-  if (act === 'stretch') { wakeT = actT - MUG_MOVE - 0.2; act = null; }   // the same stretch as on waking, once the mugs are down
+  if (act === 'stretch') { wakeT = actT - MUG_MOVE - 0.2; act = null; }
+  // jamming: whenever music is playing (and nothing else is going on)
+  if (params.has('jam')) { MUSIC.on = true; const p = 60 / 112; if (Math.floor(t / p) !== D.fakeBeat) { D.fakeBeat = Math.floor(t / p); MUSIC.lastBeat = performance.now() - (t % p) * 1000; } }
+  const jamming = MUSIC.on && !act && D.sleep < 0.5 && bdayT === Infinity;   // the same stretch as on waking, once the mugs are down
 
   // Nom's crocodile: comes out for a cuddle, and always when Nom is asleep
-  const wantCroc = ((act === 'croc' || act === 'story') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories too
+  const wantCroc = ((act === 'croc' || act === 'story' || act === 'movie') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories and watches movies too
   // mugs: put down (bending over) before sleeping, stretching or cuddling Greg; picked up again afterwards
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
   const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2)
-                  || (act === 'refill' && actT < 11.2);   // Barry sets his mug down next to Nom for a top-up
+                  || (act === 'refill' && actT < 11.2)    // Barry sets his mug down next to Nom for a top-up
+                  || (act === 'movie' && actT < ACT_LEN.movie - MUG_MOVE - 0.2) || jamming || D.jamIn > 0;
   const wantPot = act === 'refill' && actT < 9.6;
   const nomWants = bearWants || wantCroc || D.croc > 0 || wantPot || D.pot > 0;
+  // instruments come out once the mugs are down, and go away before they're picked up
+  D.jamIn = (jamming && D.bMug >= 1 && D.nMug >= 1) ? Math.min(1, (D.jamIn || 0) + dt / 0.6) : Math.max(0, (D.jamIn || 0) - dt / 0.6);
+  if (params.has('jam')) D.jamIn = 1;
   const step = (v, up) => up ? Math.min(1, v + dt / MUG_MOVE) : Math.max(0, v - dt / MUG_MOVE);
   if (params.has('mug')) D.bMug = D.nMug = +params.get('mug');
   else { D.bMug = step(D.bMug, bearWants); D.nMug = step(D.nMug, nomWants); }
@@ -1060,7 +1158,17 @@ function direct(t) {
   const bookOpen = storyT < ACT_LEN.story ? smooth(Math.min((storyT - BOOK_ON - 0.6) / 0.8, (BOOK_OFF - storyT) / 0.8)) : 0;
   const reading = storyT > 4 && storyT < BOOK_OFF - 1;
   const page = reading ? Math.floor((storyT - 4) / 5) : 0, pageT = reading ? ((storyT - 4) % 5) : 0;
-  const doze = storyT < ACT_LEN.story ? smooth(Math.min((storyT - 26) / 8, (BOOK_OFF + 1.5 - storyT) / 1.5)) : 0;
+  const storyDoze = storyT < ACT_LEN.story ? smooth(Math.min((storyT - 26) / 8, (BOOK_OFF + 1.5 - storyT) / 1.5)) : 0;
+
+  // movie night: mugs down, Greg and the popcorn come out, the TV comes on at 3.5 s; a scary bit around 30 s
+  // (Nom hides behind Greg); Nom nods off near the end; TV off at 55 s, then everything is put away
+  const movieT = act === 'movie' ? actT : Infinity;
+  const tvOn = movieT < ACT_LEN.movie ? smooth(Math.min((movieT - 3.5) / 0.5, (55 - movieT) / 0.5)) : 0;
+  const bowl = movieT < ACT_LEN.movie ? smooth(Math.min((movieT - 2.2) / 0.5, (56.2 - movieT) / 0.5)) : 0;
+  const scary = movieT < ACT_LEN.movie ? smooth(Math.min((movieT - 29.5) / 0.4, (36 - movieT) / 0.8)) : 0;
+  const movieDoze = movieT < ACT_LEN.movie ? smooth(Math.min((movieT - 43) / 6, (55.5 - movieT) / 1.2)) : 0;
+  const watching = movieT < ACT_LEN.movie ? smooth(Math.min((movieT - 3) / 0.8, (55.5 - movieT) / 0.8)) : 0;
+  const doze = Math.max(storyDoze, movieDoze);
 
   // refill: mug down (0-1.6 s), fetch the pot (to 3.2 s), pour for Barry (4-6.5 s), then into its own mug (7.5-9.5 s)
   const refillT = act === 'refill' ? actT : Infinity;
@@ -1071,7 +1179,7 @@ function direct(t) {
   // waving hello when your pointer comes close (Nom first; Barry joins in if you stay)
   const near = mouseNear();
   // waves as soon as your pointer has been near them for a moment (once per visit, at most every 15 s)
-  const idle = !act && D.sleep < 0.05 && D.bMug < 0.05 && D.nMug < 0.05 && wakeT > 3 && bdayT === Infinity;
+  const idle = !act && !MUSIC.on && D.sleep < 0.05 && D.bMug < 0.05 && D.nMug < 0.05 && wakeT > 3 && bdayT === Infinity;
   if (near) { if (D.nearSince == null) D.nearSince = t; } else { D.nearSince = null; D.wavedThisVisit = false; }
   if (near && idle && !D.wavedThisVisit && t - D.nearSince > 0.25 && t - D.lastWave > 15) {
     D.waveStart = t; D.lastWave = t; D.barryJoin = false; D.wavedThisVisit = true;
@@ -1085,7 +1193,7 @@ function direct(t) {
   const nowMs = performance.now();
   if (nowMs - mouseMovedAt > 5 * 60000) D.activeSince = null; else if (D.activeSince == null) D.activeSince = nowMs;
   if (!params.has('preview') && !params.has('rest') && lastStart(t, CHAT_TIMES).since < 0.1) D.chatDueAt = t;
-  const freeToChat = !act && D.sleep < 0.05 && bdayT === Infinity && wakeT > 6 && D.bMug < 0.05 && D.nMug < 0.05 && !(waveT < 4.5);
+  const freeToChat = !act && !MUSIC.on && D.sleep < 0.05 && bdayT === Infinity && wakeT > 6 && D.bMug < 0.05 && D.nMug < 0.05 && !(waveT < 4.5);
   if ((D.chatNow || (D.chatDueAt != null && t - D.chatDueAt < 120)) && freeToChat && !D.chat) {
     D.chat = { conv: pickChat(), start: t }; D.chatNow = false; D.chatDueAt = null;
   }
@@ -1112,7 +1220,7 @@ function direct(t) {
   return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
            stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
            toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze,
-           pot: D.pot || 0, pourBarry, pourNom, holdOut, chat, waveN, waveB, waveT, dt };
+           pot: D.pot || 0, pourBarry, pourNom, holdOut, chat, movieT, tvOn, bowl, scary, watching, jamIn: D.jamIn || 0, waveN, waveB, waveT, dt };
 }
 const BDAY_LEN = 22;
 
@@ -1192,19 +1300,28 @@ function placeMug(mug, arms, hold, floorSpot, k) {
 }
 
 function pose(t) {
-  const W = direct(t); window.__W = W;          // what the director says is happening
+  const W = direct(t); window.__W = W;
+  // the beat (when jamming): a quick pulse on each beat, and a slow sway every two beats
+  const sinceBeat = params.has('jam') ? (t % (60 / 112)) : (performance.now() - MUSIC.lastBeat) / 1000;
+  const beat = Math.exp(-sinceBeat / 0.13) * W.jamIn;
+  const sway = Math.sin(Math.PI * sinceBeat / (60 / MUSIC.bpm) + (D.swayFlip ? Math.PI : 0)) * W.jamIn;
+  if (sinceBeat < D.lastSinceBeat) D.swayFlip = !D.swayFlip;   // a new beat
+  const newBeat = sinceBeat < (D.lastSinceBeat ?? 1e9); D.lastSinceBeat = sinceBeat;          // what the director says is happening
   const zz = smooth((W.sleep - 0.45) / 0.55);  // eyes closed / leaning: second half of falling asleep
   const bearDown = W.bMug, nomDown = W.nMug;   // 0 = mug in hand, 1 = on the floor (in between: bending to put it down / pick it up)
   // Bear: breathes; sips now and then; on birthdays he raises his mug for a toast.
   let bs = params.has('preview') ? sip(t, 9, 4.8) : sipAt(t, BEAR_SIPS);
-  bs = Math.max(bs * (1 - bearDown), W.cheer * 0.6, W.toastRaise * 0.8, W.bookOut * 0.35);   // holds the book up a little
+  const munch = W.bowl > 0.9 && W.watching > 0.9 && W.scary < 0.1 ? smooth(Math.min(((W.movieT + 2) % 7) / 0.5, (1.6 - ((W.movieT + 2) % 7)) / 0.5)) : 0;
+  bs = Math.max(bs * (1 - bearDown), W.cheer * 0.6, W.toastRaise * 0.8, W.bookOut * 0.35,
+                W.bowl * 0.25 + 0.5 * munch, W.jamIn * (0.22 + 0.3 * beat));   // book / popcorn bowl / tambourine held up
   const breath = 1 + (0.012 + 0.014 * zz) * Math.sin(t * (1.6 - 0.8 * zz));   // slower, deeper breaths when asleep
   const tall = 1 + 0.045 * W.stretch;          // stretching up tall
   const bSquash = 1 - 0.09 * Math.sin(Math.PI * W.bMug);   // squashes down a little as he bends over
   bearBody.scale.set((1 + (breath - 1) * 0.5) / Math.sqrt(tall) / Math.sqrt(bSquash), breath * tall * bSquash, 1);
   bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown) ;   // nods asleep, leans back to stretch, bends to reach the floor
-  bearBody.rotation.z = -0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
-  if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn;    // turns towards Nom for a toast
+  bearBody.rotation.x += 0.05 * beat;   // head-bopping to the music
+  bearBody.rotation.z = 0.045 * sway - 0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
+  if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn + 0.3 * W.watching;    // turns towards Nom for a toast, or to the TV
   pivotAbout(bearBody, BEAR_BEND_AT);
   bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
   bearPoses.show(bs);
@@ -1221,6 +1338,10 @@ function pose(t) {
   if (W.pot > 0 || W.pourBarry > 0) D.bSide = 1; else if (bearDown < 0.02) D.bSide = 0;
   bearFloor.position.set(...lerp3([0, 0.24, 1.55], [-0.48, 0.24, 1.68], D.bSide || 0));
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
+  // popcorn and tambourine ride in his paws, kept upright
+  popcorn.visible = W.bowl > 0.01; popcorn.scale.setScalar(0.4 + 0.6 * W.bowl); popcorn.rotation.x = BEAR_ARM_LIFT * bs - 0.15;
+  tambourine.visible = W.jamIn > 0.01; tambourine.scale.setScalar(0.4 + 0.6 * W.jamIn);
+  tambourine.rotation.set(BEAR_ARM_LIFT * bs - 0.25, 0.2, 0.35 * beat * Math.sin(t * 40));
   // reading aloud: little mouth movements in bursts, like words
   const chatting = W.chat && W.chat.who === 'B' && W.chat.text && W.chat.lineT < W.chat.len - 0.5;
   const talk = (W.reading && W.pageT > 0.9 && W.pageT < 4.4) || chatting ? Math.max(0, Math.sin(t * 11)) * (0.5 + 0.5 * Math.sin(t * 2.3)) : 0;
@@ -1228,7 +1349,8 @@ function pose(t) {
   D.bLevel = Math.min(1, Math.max(0.22, (D.bLevel ?? 1) - (bs > 0.9 && W.toastRaise === 0 ? W.dt * 0.05 : 0) + (W.pourBarry > 0.6 ? W.dt * 0.4 : 0)));
   bearMug.userData.setLevel(D.bLevel);
   bearYawn.visible = W.yawn > 0.05 || talk > 0.15; bearMouthLine.visible = !bearYawn.visible;
-  const mo = Math.max(W.yawn, 0.32 * talk);
+  const mo = Math.max(W.yawn, 0.32 * talk, 0.45 * W.scary, 0.3 * munch * Math.max(0, Math.sin(t * 14)));
+  if (W.scary > 0.3 || munch > 0.3) { bearYawn.visible = true; bearMouthLine.visible = false; }
   bearYawn.scale.set(0.075 * (0.6 + 0.4 * mo), 0.1 * mo, 0.04);
 
   // the book: appears from his lap, opens, and turns its pages
@@ -1278,7 +1400,7 @@ function pose(t) {
     const sz = 0.7 * (0.7 + 0.3 * bub); bubble.scale.set(sz, sz, sz); bubble.material.opacity = bub;
   }
   const bFace = W.chat ? W.chat.bFace : 'normal';
-  const happy = (bFace === 'happy' && !chatting) || (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5 && W.holdOut < 0.5) || W.waveB > 0.5 || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
+  const happy = (W.jamIn > 0.5) || (bFace === 'happy' && !chatting) || (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5 && W.holdOut < 0.5) || W.waveB > 0.5 || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
   const sleepy = !happy && (zz > 0.5 || bFace === 'sleepy' || blinking(t, 4.7, 1));
   bearEyes.forEach((e, i) => {
     e.visible = !happy && !sleepy;
@@ -1292,6 +1414,7 @@ function pose(t) {
       ox = dx / d * m; oy = dy / d * m;
     }
     if (bFace === 'wonder') { ox = 0.012 * (i ? 1 : -1); oy = 0.035; }   // gazing upwards
+    if (W.watching > 0.5) { ox = 0.03; oy = W.scary > 0.3 ? 0.01 : -0.005; }   // watching the TV
     const x = (i ? 1 : -1) * EYE.x + ox, y = EYE.y + oy;
     e.position.set(x, y, fz(Math.abs(x), y));
   });
@@ -1299,10 +1422,43 @@ function pose(t) {
   bearSleepy.forEach(e => (e.visible = sleepy));
   updateSteam(t, (1 - bs) * (1 - bearDown) * (1 + 0.8 * W.holdOut));
   bearHat.visible = alienHat.visible = W.hats;
+  // maracas in Nom's paws, shaken on the beat
+  maracas.forEach((m, i) => { m.visible = W.jamIn > 0.01; m.scale.setScalar(0.4 + 0.6 * W.jamIn); m.rotation.x = 0.5 * beat * Math.sin(t * 36 + i * 2); });
+  // musical notes drift up on the beats
+  if (newBeat && W.jamIn > 0.5) { const n = notes[(D.noteI = ((D.noteI || 0) + 1) % notes.length)]; n.userData.born = t; n.userData.x = -1.6 + Math.random() * 2.0; }
+  notes.forEach(n => {
+    const age = t - n.userData.born; n.visible = age >= 0 && age < 2.2 && W.jamIn > 0.01;
+    if (!n.visible) return;
+    n.position.set(n.userData.x + 0.15 * Math.sin(age * 3), 1.6 + age * 0.55, 1.4);
+    const sz = 0.26 * (0.8 + 0.2 * Math.sin(age * 6)); n.scale.set(sz, sz, sz);
+    n.material.opacity = Math.min(1, age / 0.2, (2.2 - age) / 0.5);
+  });
+  // the TV: flickering colours from the movie (a red flash at the scary bit)
+  tv.visible = W.tvOn > 0.001 || (W.movieT < ACT_LEN.movie && W.movieT > 2.5 && W.movieT < 57);
+  if (tv.visible) {
+    const scene_ = Math.floor(t / 1.7), r = (k) => { const x = Math.sin(scene_ * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
+    const col = new THREE.Color().setHSL(0.5 + 0.25 * r(1), 0.6, 0.55 + 0.15 * r(2));
+    if (W.scary > 0.2) col.lerp(new THREE.Color(Math.sin(t * 18) > 0 ? 0xff3b2f : 0x220000), W.scary);
+    const fl = (0.85 + 0.15 * Math.sin(t * 23) * Math.sin(t * 7)) * W.tvOn;
+    tvScreenMat.color.copy(col).multiplyScalar(fl);
+    tvGlow.material.color.copy(col); tvGlow.material.opacity = 0.55 * fl;
+    tvLight.color.copy(col); tvLight.intensity = 3.0 * fl;
+  }
+  // a piece of popcorn tossed over to Nom now and then (Nom catches it)
+  const tossT = W.bowl > 0.9 && W.watching > 0.9 && W.scary < 0.1 ? ((W.movieT + 5) % 5) : 9;
+  flyKernel.visible = tossT < 0.9; D.kernelCatch = tossT > 0.45 && tossT < 1.3;
+  if (flyKernel.visible) {
+    bearBody.updateMatrixWorld(true); alienBody.updateMatrixWorld(true);
+    popcorn.getWorldPosition(_s1); _s1.y += 0.15;
+    alienBody.localToWorld(_s2.set(0, 0.9, 0.45));
+    const u = tossT / 0.9;
+    flyKernel.position.lerpVectors(_s1, _s2, u); flyKernel.position.y += Math.sin(Math.PI * u) * 0.45;
+    flyKernel.rotation.set(t * 9, t * 7, 0);
+  }
   // Halloween week: the jack-o'-lantern (lit after dark); bats flit about on the 31st
   const now = new Date(), mon = now.getMonth(), day = now.getDate(), hr = now.getHours();
   const halloween = params.has('halloween') || (mon === 9 && day >= 24);
-  pumpkin.visible = halloween;
+  pumpkin.visible = halloween && !tv.visible;
   if (halloween) {
     const lit = params.has('night') || hr >= 18 || hr < 6;
     const flick = lit ? 0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 5.3) : 0;
@@ -1326,7 +1482,7 @@ function pose(t) {
 
   // Alien: sways, hops every 5 s, drinks every 7 s, blinks, glances over at the bear.
   let us = params.has('preview') ? sip(t, 7, 6.3) : sipAt(t, ALIEN_SIPS);
-  us = Math.max(us * (1 - nomDown), W.cheer * 0.7, W.toastRaise * 0.85, 0.5 * Math.max(W.pourBarry, W.pourNom));   // lifts the pot a little to pour
+  us = Math.max(us * (1 - nomDown), W.cheer * 0.7, W.toastRaise * 0.85, 0.5 * Math.max(W.pourBarry, W.pourNom), W.jamIn * (0.15 + 0.45 * beat));   // lifts the pot a little to pour
   // how long since its last sip began (for the contented "mmm" afterwards)
   const sinceSip = params.has('preview') ? (((t + 6.3) % 7) >= 3.8 ? ((t + 6.3) % 7) - 3.8 : ((t + 6.3) % 7) + 3.2)
                                          : lastStart(t, ALIEN_SIPS).since;
@@ -1338,8 +1494,8 @@ function pose(t) {
     if (m.since < 3.6 && us === 0 && !afterSip) { mood = MOODS[m.i % MOODS.length]; moodT = m.since; }
   }
   if (mood === 'content') mood = null;
-  if (W.sleep > 0.05 || W.nomYawn > 0 || W.croc > 0 || W.toastTurn > 0 || W.bookOut > 0 || W.pot > 0 || W.waveN > 0) mood = null;
-  const cuddle = W.croc > 0.95 && W.sleep < 0.3 && W.bookOut < 0.5;     // awake and hugging the crocodile
+  if (W.jamIn > 0 || W.sleep > 0.05 || W.nomYawn > 0 || W.croc > 0 || W.toastTurn > 0 || W.bookOut > 0 || W.pot > 0 || W.waveN > 0) mood = null;
+  const cuddle = W.croc > 0.95 && W.sleep < 0.3 && W.bookOut < 0.5 && W.watching < 0.5;     // awake and hugging the crocodile
   const nz = Math.max(zz, W.doze);                   // asleep, or dozing off during the story
   if (W.party > 0.3 || W.thanks > 0.3) { mood = 'giggle'; moodT = (W.thanks > 0.3 ? t : W.bdayT) % 3.6; }   // giggly on birthdays
   const nFace = W.chat ? W.chat.nFace : null;
@@ -1351,15 +1507,17 @@ function pose(t) {
   const hopping = false;   // the little hop is switched off
   alien.position.y = (hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0) + 0.16 * W.pourBarry;   // up on tiptoes to reach Barry's mug
   if (mood === 'giggle') alien.position.y += Math.abs(Math.sin(moodT * 16)) * 0.035 * ease;   // little giggly bounce
+  alien.position.y += 0.07 * beat;                                                              // bouncing to the beat
   let tilt = params.has('rest') ? 0 : 0.035 * Math.sin(t * 1.3);
   if (mood === 'curious') tilt += 0.14 * ease;                  // head tilt
   if (mood === 'sleepy') tilt += 0.07 * ease * Math.sin(moodT * 1.2);   // slow, dozy sway
-  if (cuddle) tilt += 0.09 * Math.sin(t * 2.2);
+  if (cuddle && W.watching < 0.5) tilt += 0.09 * Math.sin(t * 2.2);
+  tilt += 0.06 * sway + 0.03 * Math.sin(t * 34) * W.scary;   // dancing / shivering at the scary bit
   if (nFace === 'groan') tilt += 0.05 * Math.sin(t * 9) * Math.max(0, 1 - W.chat.lineT / 1.2);   // a little head shake              // rocking the crocodile side to side
   tilt -= 0.07 * W.toastTurn + 0.12 * W.pourBarry;            // leans in for a toast, or to pour for Barry
   if (W.waveN > 0) tilt += 0.05 * Math.sin(W.waveT * 12.5) * W.waveN;   // wiggles as it waves
   alienBody.rotation.z = tilt * (1 - nz) - 0.17 * nz;   // asleep: leans over onto Barry
-  if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn;
+  if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn + 0.35 * W.watching;
   const nomTall = 1 + 0.06 * W.nomYawn;
   const nSquash = 1 - 0.09 * Math.sin(Math.PI * W.nMug);
   alienBody.scale.set(1 / Math.sqrt(nomTall * nSquash), nomTall * nSquash, 1);
@@ -1418,6 +1576,7 @@ function pose(t) {
   if (croc.visible && !params.has('greg')) {
     const k = smooth(Math.min(1, W.croc * 2));        // in Nom's arms by half-way, while Nom is turned round
     croc.position.set(...lerp3(CROC_AWAY.p, CROC_HUG.p, k)); croc.position.y += Math.sin(Math.PI * k) * 0.15;
+    croc.position.y += 0.36 * W.scary; croc.position.z += 0.1 * W.scary;   // hiding behind Greg
     croc.rotation.set(...lerp3(CROC_AWAY.r, CROC_HUG.r, k));
     const sq = cuddle ? 1 - 0.05 * Math.max(0, Math.sin(t * 4.4)) : 1;   // a squeeze now and then
     croc.scale.set(CROC_SCALE * sq, CROC_SCALE / sq, CROC_SCALE);
@@ -1443,7 +1602,7 @@ function pose(t) {
   const gp = t % 13, glance = !params.has('rest') && !mood && gp > 5 && gp < 7;
   const sipping = us > 0.5;
   const mmm = params.get('expr') === 'content' || (!mood && afterSip && sinceSip < 4.8);   // eyes stay happily closed just after a sip
-  const happyEyes = nz < 0.5 && ((nFace === 'happy' && !nomTalking) || W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
+  const happyEyes = nz < 0.5 && (W.jamIn > 0.5 || (nFace === 'happy' && !nomTalking) || W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
   const sleepyEyes = nz > 0.5 || mood === 'sleepy' || (blink && !happyEyes);
   const wide = mood === 'curious' ? 1 + 0.15 * ease : 1;
   alienEyes.forEach(({ white, pupil, s, sleepy, happy }) => {
@@ -1451,7 +1610,9 @@ function pose(t) {
     happy.visible = happyEyes;
     sleepy.visible = sleepyEyes && !happyEyes;
     white.scale.set(EYE_R * wide, EYE_R * wide, 0.055);
-    if (W.bookOut > 0.5) placePupil(pupil, 0.08, -0.03);                      // looking at the pictures in the book
+    if (W.scary > 0.3) placePupil(pupil, 0.08, 0.02);                          // peeking over Greg
+    else if (W.watching > 0.5) placePupil(pupil, 0.1, -0.03);                  // watching the TV
+    else if (W.bookOut > 0.5) placePupil(pupil, 0.08, -0.03);                      // looking at the pictures in the book
     else if (W.pourNom > 0.3) placePupil(pupil, 0, -0.1);                      // watching its own mug fill up
     else if (watchingMouse() && W.sleep < 0.3) lookAtMouse(white, pupil);          // following your mouse pointer
     else if (nFace === 'wonder') placePupil(pupil, -s * 0.02, 0.1);   // gazing up at the big questions
@@ -1464,6 +1625,8 @@ function pose(t) {
   mouthO.scale.set(0.045 * (1 + 0.6 * W.nomYawn), 0.055 * (1 + 1.3 * W.nomYawn), 0.02);
   if (W.nomYawn > 0.05) setMouth('o');                       // a big yawn
   else if (nomTalking) setMouth(Math.sin(t * 13) > 0 ? 'o' : 'smile');   // chatting away
+  else if (W.jamIn > 0.5) setMouth(beat > 0.4 ? 'open' : 'smile');
+  else if (W.scary > 0.3 || D.kernelCatch) setMouth('o');
   else if (nFace === 'o') setMouth('o');
   else if (nFace === 'groan') setMouth('smile');
   else if (nz > 0.3 || cuddle || W.bookOut > 0.5) setMouth('smile');
