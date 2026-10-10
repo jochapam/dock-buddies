@@ -13,6 +13,8 @@ import WebKit
 import SwiftUI
 import ServiceManagement
 import AVFoundation
+import CoreAudio
+import AudioToolbox
 
 /// The scene is drawn for a 460 × 340 frame; the window keeps that shape at every size.
 let aspect: CGFloat = 340.0 / 460.0
@@ -151,6 +153,8 @@ final class SettingsModel: ObservableObject {
     @Published var loginNote = ""
     @Published var jam: Bool { didSet { if jam != oldValue { d.set(jam, forKey: AppDelegate.jamKey); app?.setJam(jam) } } }
     @Published var jamNote = ""
+    @Published var jamDevice: String { didSet { if jamDevice != oldValue { d.set(jamDevice, forKey: AppDelegate.jamDeviceKey); app?.restartListener() } } }
+    @Published var inputs: [AudioInput] = []
     @Published var screenID: Int { didSet { if screenID != oldValue && !syncing { app?.moveToScreen(screenID) } } }
     var syncing = false
     @Published var onDock: Bool { didSet { d.set(onDock, forKey: AppDelegate.onDockKey); app?.reposition() } }
@@ -186,6 +190,8 @@ final class SettingsModel: ObservableObject {
         screenID = AppDelegate.displayID(app.targetScreen())
         onDock = d.bool(forKey: AppDelegate.onDockKey)
         jam = d.bool(forKey: AppDelegate.jamKey)
+        jamDevice = d.string(forKey: AppDelegate.jamDeviceKey) ?? ""
+        inputs = AudioInputs.all()
         refreshScreens()
     }
 
@@ -242,7 +248,15 @@ struct SettingsView: View {
             GroupBox(label: Text("Music").font(.headline)) {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("Jam along when music is playing", isOn: $model.jam)
-                    Text("Listens through the microphone to hear when music is on. Only the loudness and the beat are worked out, right here on this Mac: nothing is recorded, kept or sent anywhere.")
+                    Picker("Listen to", selection: $model.jamDevice) {
+                        Text("Automatic (audio interface if plugged in)").tag("")
+                        ForEach(model.inputs) { input in Text(input.name).tag(input.id) }
+                    }
+                    .disabled(!model.jam)
+                    if model.jam, let now = model.app?.listener.current {
+                        Text("Listening to: \(now.name)").font(.caption).foregroundColor(.secondary)
+                    }
+                    Text("Listens to your audio interface (like a MiniFuse) or the microphone to hear when music is on. Only the loudness and the beat are worked out, right here on this Mac: nothing is recorded, kept or sent anywhere.")
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if !model.jamNote.isEmpty {
@@ -340,9 +354,73 @@ struct SettingsView: View {
 /// Listens through the microphone (only when switched on in Settings) to tell whether music is playing,
 /// how loud it is and when the beats land, so Barry and Nom can jam along. Nothing is recorded, kept or sent:
 /// each tiny slice of sound is reduced to a loudness number and thrown away.
+/// A sound input on this Mac (built-in mic, an audio interface like a MiniFuse, …).
+struct AudioInput: Identifiable, Hashable {
+    let id: String          // the device's lasting ID (UID)
+    let deviceID: AudioDeviceID
+    let name: String
+    let external: Bool      // plugged in (USB, Thunderbolt…) rather than built in
+}
+
+enum AudioInputs {
+    private static func address(_ sel: AudioObjectPropertySelector, _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(mSelector: sel, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+    }
+    private static func string(_ id: AudioObjectID, _ sel: AudioObjectPropertySelector) -> String {
+        var addr = address(sel)
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &value) == noErr, let v = value else { return "" }
+        return v.takeRetainedValue() as String
+    }
+    private static func inputChannels(_ id: AudioObjectID) -> Int {
+        var addr = address(kAudioDevicePropertyStreamConfiguration, kAudioDevicePropertyScopeInput)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr, size > 0 else { return 0 }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, raw) == noErr else { return 0 }
+        let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
+        return list.reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+    private static func transport(_ id: AudioObjectID) -> UInt32 {
+        var addr = address(kAudioDevicePropertyTransportType)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &value)
+        return value
+    }
+
+    /// Every device that can record sound.
+    static func all() -> [AudioInput] {
+        var addr = address(kAudioHardwarePropertyDevices)
+        var size: UInt32 = 0
+        let sys = AudioObjectID(kAudioObjectSystemObject)
+        guard AudioObjectGetPropertyDataSize(sys, &addr, 0, nil, &size) == noErr else { return [] }
+        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(sys, &addr, 0, nil, &size, &ids) == noErr else { return [] }
+        return ids.compactMap { id in
+            guard inputChannels(id) > 0 else { return nil }
+            let t = transport(id)
+            if t == kAudioDeviceTransportTypeVirtual || t == kAudioDeviceTransportTypeAggregate { return nil }   // skip virtual mics (Zoom, Teams…)
+            return AudioInput(id: string(id, kAudioDevicePropertyDeviceUID), deviceID: id,
+                              name: string(id, kAudioObjectPropertyName), external: t != kAudioDeviceTransportTypeBuiltIn)
+        }
+    }
+
+    /// What "Automatic" listens to: a MiniFuse if one is plugged in, otherwise any plugged-in audio
+    /// interface, otherwise the Mac's own microphone.
+    static func automatic() -> AudioInput? {
+        let list = all()
+        return list.first { $0.name.lowercased().contains("minifuse") } ?? list.first { $0.external } ?? list.first
+    }
+}
+
 final class MusicListener {
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private(set) var running = false
+    private(set) var current: AudioInput?
+    private var relaxed = false                 // an instrument plugged straight in: quieter, sparser playing is still music
     private let lock = NSLock()
     private var isMusic = false, level: Float = 0, beatPending = false, bpm: Double = 0
     private var energies: [Float] = []          // the last ~0.5 s of loudness readings
@@ -351,9 +429,16 @@ final class MusicListener {
     private var lastOnset = 0.0, musicSince = 0.0, quietSince = 0.0
     private var noiseFloor: Float = 0.002
 
-    func start() -> Bool {
-        if running { return true }
+    func start(_ device: AudioInput?) -> Bool {
+        if running { if device?.id == current?.id { return true }; stop() }
+        engine = AVAudioEngine()
         let input = engine.inputNode
+        if let device, let unit = input.audioUnit {               // listen to that device rather than the default mic
+            var dev = device.deviceID
+            AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &dev, UInt32(MemoryLayout<AudioDeviceID>.size))
+        }
+        current = device
+        relaxed = device?.external ?? false
         let fmt = input.outputFormat(forBus: 0)
         guard fmt.sampleRate > 0, fmt.channelCount > 0 else { return false }
         input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] buffer, _ in self?.process(buffer) }
@@ -367,12 +452,16 @@ final class MusicListener {
     }
 
     private func process(_ buffer: AVAudioPCMBuffer) {
-        guard let ch = buffer.floatChannelData?[0] else { return }
+        guard let data = buffer.floatChannelData else { return }
         let n = Int(buffer.frameLength)
         if n == 0 { return }
-        var sum: Float = 0
-        for i in 0..<n { sum += ch[i] * ch[i] }
-        let rms = (sum / Float(n)).squareRoot()
+        var rms: Float = 0                       // the loudest of the inputs (the instrument may be on input 1 or 2)
+        for c in 0..<Int(buffer.format.channelCount) {
+            let ch = data[c]
+            var sum: Float = 0
+            for i in 0..<n { sum += ch[i] * ch[i] }
+            rms = max(rms, (sum / Float(n)).squareRoot())
+        }
         let now = CFAbsoluteTimeGetCurrent()
         lock.lock(); defer { lock.unlock() }
         noiseFloor = rms < noiseFloor ? rms : noiseFloor + (rms - noiseFloor) * 0.0005   // slowly follows the room's quiet level
@@ -381,15 +470,15 @@ final class MusicListener {
         level = min(1, rms * 8)
         sustained.append(rms > max(noiseFloor * 3, 0.004)); if sustained.count > 170 { sustained.removeFirst() }
         // a beat: a jump well above the recent average, not too soon after the last one
-        if rms > avg * 1.45 && rms > noiseFloor * 4 && rms > 0.01 && now - lastOnset > 0.22 {
+        if rms > avg * 1.45 && rms > noiseFloor * 4 && rms > (relaxed ? 0.004 : 0.01) && now - lastOnset > 0.22 {
             lastOnset = now; onsets.append(now); beatPending = true
         }
         onsets.removeAll { now - $0 > 8 }
         // music: loud enough, almost no pauses (talking has lots), and a steady stream of beats
-        let loud = avg > max(noiseFloor * 5, 0.008)
+        let loud = avg > max(noiseFloor * 5, relaxed ? 0.003 : 0.008)
         let filled = Double(sustained.filter { $0 }.count) / Double(max(1, sustained.count))
         let rate = Double(onsets.count) / 8
-        let musical = loud && filled > 0.85 && rate > 0.9 && rate < 5
+        let musical = loud && filled > (relaxed ? 0.6 : 0.85) && rate > (relaxed ? 0.4 : 0.9) && rate < 6
         if musical { quietSince = 0; if musicSince == 0 { musicSince = now } }
         else { if quietSince == 0 { quietSince = now }; if now - quietSince > 1.5 { musicSince = 0 } }
         if !isMusic && musicSince > 0 && now - musicSince > 5 { isMusic = true }        // 5 s of music: start jamming
@@ -474,7 +563,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
     var updating = false
     let listener = MusicListener()
     var musicWasOn = false
-    static let jamKey = "DockBuddiesJam"
+    static let jamKey = "DockBuddiesJam", jamDeviceKey = "DockBuddiesJamDevice"
+
+    /// The input chosen in Settings (or the automatic choice).
+    func chosenInput() -> AudioInput? {
+        let uid = UserDefaults.standard.string(forKey: AppDelegate.jamDeviceKey) ?? ""
+        if !uid.isEmpty, let d = AudioInputs.all().first(where: { $0.id == uid }) { return d }
+        return AudioInputs.automatic()
+    }
+
+    func restartListener() {
+        guard UserDefaults.standard.bool(forKey: AppDelegate.jamKey), listener.running else { return }
+        listener.stop()
+        _ = listener.start(chosenInput())
+        settingsModel?.objectWillChange.send()
+    }
+
+    /// Every so often: if an audio interface has been plugged in (or unplugged), switch to it.
+    @objc func checkInputs() {
+        guard listener.running else { return }
+        if chosenInput()?.id != listener.current?.id { restartListener() }
+    }
     var card: CardPanel?
     var cardTimer: Timer?
     var lastBirthdayShown: Date?
@@ -553,6 +662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         // Birthday: check shortly after start, then every 30 seconds.
         Timer.scheduledTimer(timeInterval: 4, target: self, selector: #selector(checkBirthday), userInfo: nil, repeats: false)
         if UserDefaults.standard.bool(forKey: AppDelegate.jamKey) { setJam(true) }
+        Timer.scheduledTimer(timeInterval: 10, target: self, selector: #selector(checkInputs), userInfo: nil, repeats: true)
         Timer.scheduledTimer(timeInterval: 30, target: self, selector: #selector(checkBirthday), userInfo: nil, repeats: true)
 
         // Updates: a minute after start, then every few hours.
@@ -677,6 +787,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
             settingsWindow = w
         }
         settingsModel?.refreshScreens()
+        settingsModel?.inputs = AudioInputs.all()
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
@@ -926,12 +1037,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         }
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
-            if !listener.start() { settingsModel?.jamNote = "Couldn't open the microphone." }
+            if !listener.start(chosenInput()) { settingsModel?.jamNote = "Couldn't open the microphone." }
             else { settingsModel?.jamNote = "" }
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { granted in
                 Task { @MainActor in
-                    if granted { _ = self.listener.start(); self.settingsModel?.jamNote = "" }
+                    if granted { _ = self.listener.start(self.chosenInput()); self.settingsModel?.jamNote = ""; self.settingsModel?.objectWillChange.send() }
                     else { self.settingsModel?.jamNote = "Microphone access was turned down. You can allow it in System Settings → Privacy & Security → Microphone." }
                 }
             }
