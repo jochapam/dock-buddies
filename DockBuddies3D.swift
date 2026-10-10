@@ -572,7 +572,7 @@ final class BubbleView: NSView {
         sides.lineWidth = 2; edge.setStroke(); sides.stroke()
         let inner = body.insetBy(dx: BubbleView.padX, dy: BubbleView.padY)
         let h = measure(text, width: inner.width).height             // centred vertically, never clipped
-        let r = NSRect(x: inner.minX, y: inner.midY - h / 2, width: inner.width, height: max(h, inner.height))
+        let r = NSRect(x: inner.minX, y: inner.midY - h / 2, width: inner.width, height: h + 1)
         (text as NSString).draw(with: r, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
     }
 }
