@@ -1093,7 +1093,7 @@ window.setMusic = (on, level, beat, bpm, bass) => {
   if (bpm > 40 && bpm < 220) MUSIC.bpm = bpm;
   if (on) lastActivityMs = performance.now();               // music wakes them up and keeps them awake
 };
-window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'chat') D.chatNow = true; };
+window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'chat') D.chatNow = true; if (name === 'jam') D.demoJam = performance.now() + 40000; };
 let lastActivityMs = performance.now();
 window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
@@ -1151,6 +1151,11 @@ function direct(t) {
   }
   if (act === 'stretch') { wakeT = actT - MUG_MOVE - 0.2; act = null; }
   // jamming: whenever music is playing (and nothing else is going on)
+  // a jam session on request (from the menu): 40 seconds of play-along to a steady beat
+  if (D.demoJam && performance.now() < D.demoJam) {
+    MUSIC.on = true; MUSIC.bpm = 112; const p = 60 / 112, nowS = performance.now() / 1000;
+    if (Math.floor(nowS / p) !== D.fakeBeat) { D.fakeBeat = Math.floor(nowS / p); MUSIC.lastBeat = performance.now(); }
+  } else if (D.demoJam) { D.demoJam = 0; MUSIC.on = false; }
   if (params.has('jam')) { MUSIC.on = true; const p = 60 / 112; if (Math.floor(t / p) !== D.fakeBeat) { D.fakeBeat = Math.floor(t / p); MUSIC.lastBeat = performance.now() - (t % p) * 1000; } }
   const jamming = MUSIC.on && !act && D.sleep < 0.5 && bdayT === Infinity;   // the same stretch as on waking, once the mugs are down
 
