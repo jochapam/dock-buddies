@@ -543,10 +543,18 @@ final class BubbleView: NSView {
         let ink = isBarry ? NSColor(red: 0.35, green: 0.23, blue: 0.13, alpha: 1) : NSColor(red: 0.48, green: 0.14, blue: 0.33, alpha: 1)
         return [.font: BubbleView.font, .foregroundColor: ink, .paragraphStyle: para]
     }
-    /// The size needed for some words (at most about 210 points wide).
+    static let padX: CGFloat = 12, padY: CGFloat = 7
+    func measure(_ words: String, width: CGFloat) -> NSSize {
+        let r = (words as NSString).boundingRect(with: NSSize(width: width, height: 1000),
+                                                 options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
+        return NSSize(width: ceil(r.width), height: ceil(r.height))
+    }
+    /// The size needed for some words: at most about 230 points wide, as tall as it takes.
     func fittingSize(for words: String) -> NSSize {
-        let r = (words as NSString).boundingRect(with: NSSize(width: 200, height: 400), options: [.usesLineFragmentOrigin], attributes: attributes)
-        return NSSize(width: ceil(r.width) + 24, height: ceil(r.height) + 14 + BubbleView.tailH)
+        let natural = measure(words, width: 200)
+        let textW = natural.width + 4                          // a little slack so nothing re-wraps
+        let textH = measure(words, width: textW).height
+        return NSSize(width: textW + 2 * BubbleView.padX + 3, height: textH + 2 * BubbleView.padY + 3 + BubbleView.tailH)
     }
     override func draw(_ dirtyRect: NSRect) {
         let th = BubbleView.tailH
@@ -562,7 +570,10 @@ final class BubbleView: NSView {
         let sides = NSBezierPath()
         sides.move(to: NSPoint(x: tx - 7, y: th + 1)); sides.line(to: NSPoint(x: tx, y: 0.5)); sides.line(to: NSPoint(x: tx + 7, y: th + 1))
         sides.lineWidth = 2; edge.setStroke(); sides.stroke()
-        (text as NSString).draw(with: body.insetBy(dx: 12, dy: 7), options: [.usesLineFragmentOrigin], attributes: attributes)
+        let inner = body.insetBy(dx: BubbleView.padX, dy: BubbleView.padY)
+        let h = measure(text, width: inner.width).height             // centred vertically, never clipped
+        let r = NSRect(x: inner.minX, y: inner.midY - h / 2, width: inner.width, height: max(h, inner.height))
+        (text as NSString).draw(with: r, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
     }
 }
 
