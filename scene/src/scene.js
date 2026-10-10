@@ -801,7 +801,7 @@ for (const [x, r] of [[-0.4, 0.17], [0.4, 0.14]]) {          // a big one and a 
 { const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.07), wood); bongos.add(bridge); }
 bongos.visible = false;
 const uke = new THREE.Group(); alienBody.add(uke);
-uke.position.set(0.16, 0.6, 0.62); uke.rotation.set(0, 0, 0.45);
+uke.position.set(0.2, 0.52, 0.62); uke.rotation.set(0, 0, -0.45);   // body by its strumming paw, neck rising to the left
 {
   const bodyMat = new THREE.MeshToonMaterial({ color: 0xd08a4a, gradientMap: TOON_BANDS.cel });
   for (const [x, r] of [[0, 0.15], [-0.17, 0.115]]) { const b = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), bodyMat); b.position.x = x; b.scale.z = 0.32; uke.add(b); }
@@ -1471,7 +1471,7 @@ function pose(t) {
   updateSteam(t, (1 - bs) * (1 - bearDown) * (1 + 0.8 * W.holdOut));
   bearHat.visible = alienHat.visible = W.hats;
   // maracas in Nom's paws, shaken on the beat
-  uke.visible = strum; uke.scale.setScalar(1.45 * (0.4 + 0.6 * W.jamIn)); uke.rotation.z = 0.45 + 0.03 * beat;
+  uke.visible = strum; uke.scale.setScalar(1.45 * (0.4 + 0.6 * W.jamIn)); uke.rotation.z = -0.45 + 0.03 * beat;
   maracas.forEach((m, i) => { m.visible = W.jamIn > 0.01 && W.jamSet !== 'band' && (W.jamSet === 'party' || i === 1); m.scale.setScalar(0.4 + 0.6 * W.jamIn); m.rotation.x = 0.5 * beat * Math.sin(t * 36 + i * 2); });
   // musical notes drift up on the beats
   if (newBeat && W.jamIn > 0.5) { const n = notes[(D.noteI = ((D.noteI || 0) + 1) % notes.length)]; n.userData.born = t; n.userData.x = -1.6 + Math.random() * 2.0; }
