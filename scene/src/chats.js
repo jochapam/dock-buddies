@@ -15,6 +15,10 @@ const evening = (c) => c.hour >= 18 && c.hour < 22;
 const late = (c) => c.hour >= 22 || c.hour < 5;
 const weekday = (c) => c.day >= 1 && c.day <= 5;
 const busy = (c) => c.activeMin >= 50;            // you've been working for a while without a break
+const festive = (c) => (c.month === 11) || (c.month === 0 && c.date <= 6);   // 1 Dec - 6 Jan
+const xmasDay = (c) => c.month === 11 && c.date === 25;
+const nye = (c) => c.month === 11 && c.date === 31;
+const newYearsDay = (c) => c.month === 0 && c.date === 1;
 
 export const CHATS = [
   // ---------------- Barry's dad jokes (Nom always laughs) ----------------
@@ -115,6 +119,39 @@ export const CHATS = [
   { when: evening, lines: [['B', 'Long day, hey?', 'sleepy', 'normal'], ['N', 'A good one though.', 'happy', 'happy']] },
   { when: late, lines: [['B', 'Shouldn\'t we all be asleep?', 'sleepy', 'normal'], ['N', 'Five more minutes…', 'sleepy', 'sleepy']] },
   { when: late, lines: [['N', 'It\'s very late…', 'normal', 'sleepy'], ['B', 'Bed soon? We\'ll keep watch.', 'happy', 'sleepy']] },
+  // ---------------- weather (from the app) ----------------
+  { when: (c) => c.rain, lines: [['N', 'Is the sky… leaking?', 'normal', 'wonder'], ['B', 'It\'s rain. Perfect cocoa weather.', 'happy', 'happy']] },
+  { when: (c) => c.rain, lines: [['B', 'Hear that rain?', 'normal', 'normal'], ['N', 'Cosy.', 'happy', 'happy']] },
+  { when: (c) => c.hot, lines: [['B', 'Phew. It\'s a scorcher.', 'sleepy', 'normal'], ['N', 'Iced coffee?', 'normal', 'giggle'],
+                                 ['B', 'Now you\'re talking.', 'happy', 'happy']] },
+  { when: (c) => c.hot, lines: [['N', 'Do I look cool in these?', 'normal', 'happy'], ['B', 'Coolest alien on the Dock.', 'happy', 'giggle']] },
+  { when: (c) => c.cold, lines: [['N', 'Brrr… it\'s chilly.', 'normal', 'sleepy'], ['B', 'Good thing we\'re fluffy.', 'happy', 'giggle']] },
+
+  // ---------------- the festive season ----------------
+  { when: festive, lines: [['N', 'Is it nearly Christmas?', 'normal', 'giggle'], ['B', 'Only a few more sleeps!', 'happy', 'giggle']] },
+  { when: festive, lines: [['B', 'Santa hats in summer.', 'happy', 'normal'], ['N', 'The Aussie way!', 'normal', 'giggle']] },
+  { when: festive, lines: [['N', 'What should I get Greg?', 'normal', 'wonder'], ['B', 'A tiny Santa hat?', 'happy', 'happy'],
+                           ['N', 'PERFECT.', 'happy', 'giggle']] },
+  { when: festive, lines: [['B', 'Why does Santa have a garden?', 'normal', 'curious'], ['N', 'Why?', 'normal', 'curious'],
+                           ['B', 'He loves to hoe, hoe, hoe!', 'happy', 'normal'], ['N', 'Hahaha!', 'happy', 'giggle']] },
+  { when: festive, lines: [['B', 'What do snowmen eat for brekkie?', 'normal', 'curious'], ['N', 'What?', 'normal', 'curious'],
+                           ['B', 'Frosted flakes.', 'happy', 'normal'], ['N', 'Hehehe!', 'happy', 'giggle']] },
+  { when: festive, lines: [['N', 'Look at the tree lights!', 'normal', 'wonder'], ['B', 'Twinkly.', 'happy', 'happy']] },
+  { when: xmasDay, lines: [['N', 'Merry Christmas, Barry!', 'normal', 'giggle'], ['B', 'Merry Christmas, Nom!', 'happy', 'happy']] },
+  { when: nye, lines: [['B', 'Any New Year\'s resolutions?', 'normal', 'curious'], ['N', 'More coffee.', 'normal', 'happy'],
+                       ['B', 'Excellent plan.', 'happy', 'giggle']] },
+  { when: newYearsDay, lines: [['N', 'Happy New Year!', 'normal', 'giggle'], ['B', 'Same coffee, brand new year.', 'happy', 'happy']] },
+
   { when: (c) => c.month === 9 && c.date >= 24, lines: [['N', 'Barry… the pumpkin is looking at me.', 'normal', 'o'],
                                                         ['B', 'It\'s friendly. Mostly.', 'happy', 'o']] },
+];
+
+// Little surprises, once in a while. `fx` makes them move to match.
+export const SURPRISES = [
+  { fx: 'hiccup', lines: [['N', 'hic!', 'normal', 'o'], ['N', 'hic!', 'curious', 'o'], ['B', 'Hold your breath!', 'normal', 'curious'],
+                          ['N', '', 'normal', 'sleepy'], ['N', '…hic!', 'happy', 'o'], ['B', 'Ah well.', 'happy', 'giggle']] },
+  { fx: 'sneeze', lines: [['N', 'Ah… ah…', 'normal', 'o'], ['N', 'ACHOO!', 'normal', 'sleepy'], ['B', 'Bless you!', 'happy', 'normal'],
+                          ['N', 'Thank you.', 'happy', 'happy']] },
+  { fx: 'search', then: 'croc', lines: [['N', 'Where\'s Greg?!', 'normal', 'curious'], ['B', 'Behind you.', 'happy', 'curious'],
+                                       ['N', 'GREG!', 'happy', 'giggle']] },
 ];

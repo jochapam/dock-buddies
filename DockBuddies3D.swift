@@ -153,6 +153,9 @@ final class SettingsModel: ObservableObject {
     @Published var loginNote = ""
     @Published var jam: Bool { didSet { if jam != oldValue { d.set(jam, forKey: AppDelegate.jamKey); app?.setJam(jam) } } }
     @Published var jamNote = ""
+    @Published var weatherOn: Bool { didSet { if weatherOn != oldValue { d.set(weatherOn, forKey: AppDelegate.weatherOnKey); app?.refreshWeather() } } }
+    @Published var place: String
+    @Published var weatherNote = ""
     @Published var updateStatus = ""
 
     func refreshUpdateStatus() {
@@ -201,6 +204,8 @@ final class SettingsModel: ObservableObject {
         screenID = AppDelegate.displayID(app.targetScreen())
         onDock = d.bool(forKey: AppDelegate.onDockKey)
         jam = d.bool(forKey: AppDelegate.jamKey)
+        weatherOn = d.object(forKey: AppDelegate.weatherOnKey) == nil ? true : d.bool(forKey: AppDelegate.weatherOnKey)
+        place = d.string(forKey: AppDelegate.placeKey) ?? "Sydney"
         jamDevice = d.string(forKey: AppDelegate.jamDeviceKey) ?? ""
         inputs = AudioInputs.all()
         refreshScreens()
@@ -262,6 +267,24 @@ struct SettingsView: View {
                     Text(model.updateStatus).font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Check for Updates") { model.app?.manualCheckForUpdates() }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+
+            GroupBox(label: Text("Weather").font(.headline)) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Show the weather (rain, sunnies, scarves)", isOn: $model.weatherOn)
+                    HStack {
+                        Text("Place")
+                        TextField("Sydney", text: $model.place)
+                            .onSubmit { model.app?.setPlace(model.place) }
+                        Button("Set") { model.app?.setPlace(model.place) }
+                    }
+                    .disabled(!model.weatherOn)
+                    if !model.weatherNote.isEmpty {
+                        Text(model.weatherNote).font(.caption).foregroundColor(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
@@ -632,6 +655,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
     static let minWidth: Double = 150, maxWidth: Double = 600, defaultWidth: Double = 300
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.current = self
         let saved = UserDefaults.standard.double(forKey: widthKey)
         if saved > 0 { width = CGFloat(min(max(saved, AppDelegate.minWidth), AppDelegate.maxWidth)) }
 
@@ -698,6 +722,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         Timer.scheduledTimer(timeInterval: 4, target: self, selector: #selector(checkBirthday), userInfo: nil, repeats: false)
         if UserDefaults.standard.bool(forKey: AppDelegate.jamKey) { setJam(true) }
         Timer.scheduledTimer(timeInterval: 10, target: self, selector: #selector(checkInputs), userInfo: nil, repeats: true)
+        // weather: shortly after start, then every 20 minutes
+        Timer.scheduledTimer(timeInterval: 5, target: self, selector: #selector(refreshWeather), userInfo: nil, repeats: false)
+        Timer.scheduledTimer(timeInterval: 20 * 60, target: self, selector: #selector(refreshWeather), userInfo: nil, repeats: true)
+        // pats: notice clicks on the buddies (the clicks still go through to whatever is underneath)
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { _ in
+            Task { @MainActor in AppDelegate.current?.clicked() }
+        }
         Timer.scheduledTimer(timeInterval: 30, target: self, selector: #selector(checkBirthday), userInfo: nil, repeats: true)
 
         // Updates: a minute after start, then every few hours.
@@ -1099,6 +1130,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScri
         guard let name = sender.representedObject as? String else { return }
         if !panel.isVisible { toggleVisible() }
         webView.evaluateJavaScript("window.doActivity && window.doActivity('\(name)')", completionHandler: nil)
+    }
+
+    // MARK: Pats
+
+    static weak var current: AppDelegate?
+    var clickMonitor: Any?
+
+    func clicked() {
+        guard panel.isVisible else { return }
+        let m = NSEvent.mouseLocation
+        guard panel.frame.contains(m) else { return }
+        let p = NSPoint(x: m.x - panel.frame.minX, y: m.y - panel.frame.minY)
+        webView.evaluateJavaScript("window.pat && window.pat(\(p.x), \(p.y))", completionHandler: nil)
+    }
+
+    // MARK: Weather (from Open-Meteo, free and keyless)
+
+    static let weatherOnKey = "DockBuddiesWeatherOn", placeKey = "DockBuddiesWeatherPlace"
+    static let latKey = "DockBuddiesWeatherLat", lonKey = "DockBuddiesWeatherLon"
+
+    @objc func refreshWeather() { Task { await fetchWeather() } }
+
+    func fetchWeather() async {
+        let d = UserDefaults.standard
+        guard d.object(forKey: AppDelegate.weatherOnKey) == nil || d.bool(forKey: AppDelegate.weatherOnKey) else {
+            webView.evaluateJavaScript("window.setWeather && window.setWeather(null)", completionHandler: nil)
+            settingsModel?.weatherNote = ""
+            return
+        }
+        var lat = d.double(forKey: AppDelegate.latKey), lon = d.double(forKey: AppDelegate.lonKey)
+        if lat == 0 && lon == 0 { lat = -33.8688; lon = 151.2093 }      // Sydney
+        guard let url = URL(string: "https://api.open-meteo.com/v1/forecast?latitude=\(lat)&longitude=\(lon)&current=temperature_2m,weather_code,is_day") else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let j = try JSONSerialization.jsonObject(with: data) as? [String: Any], let cur = j["current"] as? [String: Any] else { return }
+            let code = (cur["weather_code"] as? NSNumber)?.intValue ?? 0
+            let temp = (cur["temperature_2m"] as? NSNumber)?.doubleValue ?? 20
+            let day = (cur["is_day"] as? NSNumber)?.intValue ?? 1
+            webView.evaluateJavaScript("window.setWeather && window.setWeather(\(code), \(temp), \(day))", completionHandler: nil)
+            let place = d.string(forKey: AppDelegate.placeKey) ?? "Sydney"
+            settingsModel?.weatherNote = "\(place): \(Int(temp.rounded()))°C, \(AppDelegate.describe(code))"
+        } catch {
+            settingsModel?.weatherNote = "Couldn't get the weather right now."
+        }
+    }
+
+    /// Look a place up (suburb or city) and use it for the weather.
+    func setPlace(_ name: String) {
+        let q = name.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty, let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://geocoding-api.open-meteo.com/v1/search?name=\(enc)&count=1") else { return }
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                guard let j = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let first = (j["results"] as? [[String: Any]])?.first,
+                      let lat = (first["latitude"] as? NSNumber)?.doubleValue, let lon = (first["longitude"] as? NSNumber)?.doubleValue else {
+                    settingsModel?.weatherNote = "Couldn't find \"\(q)\". Try a nearby suburb or city."
+                    return
+                }
+                let label = [first["name"] as? String, first["admin1"] as? String].compactMap { $0 }.joined(separator: ", ")
+                let d = UserDefaults.standard
+                d.set(label.isEmpty ? q : label, forKey: AppDelegate.placeKey); d.set(lat, forKey: AppDelegate.latKey); d.set(lon, forKey: AppDelegate.lonKey)
+                settingsModel?.place = label.isEmpty ? q : label
+                await fetchWeather()
+            } catch {
+                settingsModel?.weatherNote = "Couldn't look that place up right now."
+            }
+        }
+    }
+
+    static func describe(_ code: Int) -> String {
+        switch code {
+        case 0: return "clear"
+        case 1, 2: return "partly cloudy"
+        case 3: return "cloudy"
+        case 45, 48: return "foggy"
+        case 51...57: return "drizzle"
+        case 61...67, 80...82: return "rain"
+        case 71...77, 85, 86: return "snow"
+        case 95...99: return "thunderstorms"
+        default: return "—"
+        }
     }
 
     // MARK: Music

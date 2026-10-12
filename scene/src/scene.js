@@ -1,7 +1,7 @@
 // Dock Buddies 3D — plush bear and bunny, measured from the reference renders, with tufted shell fur.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { CHATS } from './chats.js';
+import { CHATS, SURPRISES } from './chats.js';
 import * as S from './sculpt.js';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 
@@ -295,6 +295,9 @@ function mug(r, h, parent) {
   g.add(coffee);
   // how full it is (1 = full): the coffee sinks as they drink, and rises again with a refill
   g.userData.setLevel = (k) => { coffee.position.y = (-h / 2 + 0.05) + (h - 0.105) * k; coffee.scale.setScalar(0.97 + 0.03 * k); };
+  const marsh = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.24, r * 0.24, r * 0.22, 16), new THREE.MeshToonMaterial({ color: 0xfff6ea, gradientMap: TOON_BANDS.cel }));
+  marsh.rotation.x = Math.PI / 2; marsh.position.set(r * 0.25, -r * 0.1, r * 0.06); coffee.add(marsh);   // floats on the cocoa
+  marsh.visible = false; g.userData.marsh = marsh;
   const handle = new THREE.Mesh(new THREE.TorusGeometry(h * 0.27, r * 0.115, 16, 48, Math.PI * 1.3), M.ceramic);
   handle.rotation.z = -Math.PI * 0.65; handle.position.set(r * 0.95, 0.01, 0);
   g.add(handle);
@@ -825,6 +828,107 @@ const notes = Array.from({ length: 6 }, (_, i) => {
   sp.visible = false; sp.userData = { born: -1e9, x: 0 }; scene.add(sp); return sp;
 });
 
+// =====================================================================
+// Little extras: a lamp after dark, hearts when patted, weather things, the festive season
+// =====================================================================
+const lamp = new THREE.Group(); scene.add(lamp); lamp.position.set(-2.62, 0, 0.35);
+const lampShade = new THREE.MeshBasicMaterial({ color: 0xffe2a8, side: THREE.DoubleSide });
+{
+  const dark = new THREE.MeshToonMaterial({ color: 0x5a4636, gradientMap: TOON_BANDS.cel });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.05, 24), dark); base.position.y = 0.025; lamp.add(base);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.9, 10), dark); pole.position.y = 0.5; lamp.add(pole);
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.22, 0.24, 28, 1, true), lampShade); shade.position.y = 0.98; lamp.add(shade);
+}
+const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTexEarly(), color: 0xffc27a, transparent: true, depthWrite: false, toneMapped: false }));
+lampGlow.position.set(0, 0.9, 0.05); lampGlow.scale.set(1.1, 1.1, 1); lamp.add(lampGlow);
+const lampLight = new THREE.PointLight(0xffb066, 0, 4.5, 1.2); lampLight.position.set(0, 0.95, 0.2); lamp.add(lampLight);
+lamp.visible = false;
+
+const heartTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.translate(48, 50);
+  g.fillStyle = '#ff5f8f'; g.strokeStyle = '#ffffff'; g.lineWidth = 7;
+  g.beginPath(); g.moveTo(0, 30); g.bezierCurveTo(-46, 0, -28, -38, 0, -14); g.bezierCurveTo(28, -38, 46, 0, 0, 30); g.stroke(); g.fill();
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+})();
+const hearts = [0, 1, 2].map(() => { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartTex, transparent: true, depthWrite: false, toneMapped: false })); h.visible = false; scene.add(h); return h; });
+
+// weather: rain behind them, sunglasses on hot days, scarves when it's cold
+const rain = Array.from({ length: 46 }, (_, i) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.012, 0.2), new THREE.MeshBasicMaterial({ color: 0x9fc4e8, transparent: true, opacity: 0.55, depthWrite: false }));
+  const r = (k) => { const x = Math.sin(i * 91.7 + k * 37.1) * 43758.5453; return x - Math.floor(x); };
+  m.userData = { x: -3 + r(1) * 5.1, z: -1.2 - r(2) * 0.8, speed: 2.4 + r(3) * 0.8, off: r(4) * 3.4 };
+  m.rotation.z = 0.12; m.visible = false; scene.add(m); return m;
+});
+const shades = new THREE.MeshPhongMaterial({ color: 0x1b1b24, shininess: 90, specular: 0x8899aa });
+const bearSunnies = new THREE.Group(); bearBody.add(bearSunnies);
+for (const sx of [-1, 1]) {
+  const lens = new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.22, 0.03, 3, 0.07), shades);
+  lens.position.set(sx * EYE.x, EYE.y, fz(EYE.x, EYE.y) + 0.06); lens.rotation.y = sx * 0.4; bearSunnies.add(lens);
+}
+{ const br = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.035, 0.03), shades); br.position.set(0, EYE.y + 0.04, fz(0, EYE.y) + 0.06); bearSunnies.add(br); }
+bearSunnies.visible = false;
+const nomSunnies = alienEyes.map(({ s }) => {
+  const parent = alienEyes.find(e => e.s === s).white.parent;
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.235, 0.235, 0.03, 32), shades);
+  lens.rotation.x = Math.PI / 2; lens.position.z = 0.07; lens.visible = false; parent.add(lens); return lens;
+});
+function scarf(radius, tube, sx, sz, parent, y) {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 8; const g = c.getContext('2d');
+  for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#ffffff' : '#d8343a'; g.fillRect(i * 8, 0, 8, 8); }
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = THREE.RepeatWrapping; tx.repeat.x = 10;
+  const mat = new THREE.MeshToonMaterial({ map: tx, gradientMap: TOON_BANDS.cel });
+  const grp = new THREE.Group(); parent.add(grp); grp.position.y = y; grp.scale.set(sx, 1, sz);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 12, 48), mat); ring.rotation.x = Math.PI / 2; grp.add(ring);
+  const end = new THREE.Mesh(new RoundedBoxGeometry(tube * 2, radius * 0.7, tube * 1.2, 3, tube * 0.5), mat);
+  end.position.set(-radius * 0.45, -radius * 0.3, radius * 0.9); end.rotation.z = 0.15; grp.add(end);
+  grp.visible = false; return grp;
+}
+const bearScarf = scarf(0.98, 0.11, 1.08, 0.87, bearBody, 1.66);
+const nomScarf = scarf(0.7, 0.08, 1.0, 0.52, alienBody, 0.66);
+
+// festive: Santa hats, a little tree with twinkling lights, presents on Christmas Day, fireworks at New Year
+function santaHat(r, h, parent) {
+  const g = new THREE.Group();
+  const red = new THREE.MeshToonMaterial({ color: 0xd8343a, gradientMap: TOON_BANDS.cel }), white = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel });
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 32), red); cone.position.y = h / 2; cone.rotation.z = -0.25; g.add(cone);
+  const brim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.98, r * 0.24, 10, 32), white); brim.rotation.x = Math.PI / 2; g.add(brim);
+  const pom = new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 16, 12), white); pom.position.set(h * 0.24, h * 0.96, 0); g.add(pom);
+  g.visible = false; parent.add(g); return g;
+}
+const bearSanta = santaHat(0.3, 0.55, bearBody); bearSanta.position.set(-0.3, 2.48, 0.3); bearSanta.rotation.set(0.15, 0, 0.45);
+const nomSanta = santaHat(0.22, 0.42, alienBody); nomSanta.position.set(0, 1.4, 0.08); nomSanta.rotation.x = 0.12;
+const gregSanta = santaHat(0.09, 0.18, croc); gregSanta.position.set(0.44, 0.42, 0.02); gregSanta.rotation.z = -0.3;
+const tree = new THREE.Group(); scene.add(tree); tree.position.set(1.4, 0, 1.45);
+const treeLights = [];
+{
+  const green = new THREE.MeshToonMaterial({ color: 0x2f7d46, gradientMap: TOON_BANDS.cel });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.14, 10), new THREE.MeshToonMaterial({ color: 0x7a4a2e, gradientMap: TOON_BANDS.cel })); trunk.position.y = 0.07; tree.add(trunk);
+  for (const [y, r, h] of [[0.32, 0.32, 0.42], [0.56, 0.25, 0.36], [0.78, 0.17, 0.3]]) { const c = new THREE.Mesh(new THREE.ConeGeometry(r, h, 24), green); c.position.y = y; tree.add(c); }
+  const cols = [0xff4d4d, 0xffd34d, 0x5cc6c9, 0xff8fd0, 0x9cff7a];
+  for (let i = 0; i < 18; i++) {
+    const u = i / 18, y = 0.18 + u * 0.72, rad = 0.3 * (1 - u * 0.8) + 0.01, a = i * 2.3;
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), new THREE.MeshBasicMaterial({ color: cols[i % cols.length] }));
+    b.position.set(Math.cos(a) * rad, y, Math.sin(a) * rad); b.userData.col = new THREE.Color(cols[i % cols.length]); tree.add(b); treeLights.push(b);
+  }
+  const sh = new THREE.Shape();
+  for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 + Math.PI / 2, rr = i % 2 ? 0.045 : 0.1; (i ? sh.lineTo : sh.moveTo).call(sh, Math.cos(a) * rr, Math.sin(a) * rr); }
+  const star = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: false }), new THREE.MeshBasicMaterial({ color: 0xffd34d }));
+  star.position.set(0, 0.98, 0); tree.add(star);
+}
+tree.visible = false;
+function present(color, ribbon, size, x, z) {
+  const g = new THREE.Group(); scene.add(g); g.position.set(x, 0, z);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(size, size * 0.8, size), new THREE.MeshToonMaterial({ color, gradientMap: TOON_BANDS.cel })); box.position.y = size * 0.4; g.add(box);
+  const rib = new THREE.MeshToonMaterial({ color: ribbon, gradientMap: TOON_BANDS.cel });
+  const r1 = new THREE.Mesh(new THREE.BoxGeometry(size * 1.02, size * 0.82, size * 0.16), rib); r1.position.y = size * 0.4; g.add(r1);
+  const r2 = new THREE.Mesh(new THREE.BoxGeometry(size * 0.16, size * 0.82, size * 1.02), rib); r2.position.y = size * 0.4; g.add(r2);
+  const lid = new THREE.Group(); lid.position.y = size * 0.8; g.add(lid);
+  const bow = new THREE.Mesh(new THREE.TorusKnotGeometry(size * 0.12, size * 0.04, 40, 6, 2, 3), rib); bow.position.y = size * 0.08; lid.add(bow);
+  g.userData.lid = lid; g.visible = false; return g;
+}
+const gifts = [present(0x3f74b8, 0xffffff, 0.3, 1.0, 1.8), present(0xd8343a, 0xffd34d, 0.24, 1.72, 1.75)];
+const fireworks = Array.from({ length: 96 }, () => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTexEarly(), transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending })); sp.visible = false; scene.add(sp); return sp; });
+
 const bats = [0, 1].map(() => {
   const b = new THREE.Group();
   b.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), batMat));
@@ -1065,15 +1169,19 @@ const D = { sleep: params.has('preview') || params.has('rest') ? 0 : 1,   // the
             pendingAct: null, actStart: null, act: null, pot: 0, waveStart: null, lastWave: -1e9, wasNear: false, barryJoin: false };
 // Little things they do now and then while awake (one every 4-8 minutes), in this order.
 const ACTS = ['toast', 'croc', 'refill', 'story', 'stretch', 'toast', 'croc', 'refill', 'toast', 'story', 'stretch'];
-const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 13.5, movie: 62 };
+const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 13.5, movie: 62, presents: 15 };
 const MUG_MOVE = 1.6;
+/** presents are opened once a year (remembered in this Mac's web storage) */
+function giftsOpened() { try { return localStorage.getItem('dbGifts') === String(today().getFullYear()) || D.giftHat; } catch { return !!D.giftHat; } }
+function markGiftsOpened() { try { localStorage.setItem('dbGifts', String(today().getFullYear())); } catch {} }
 const CHAT_TIMES = sipSchedule(97531, 420, 720, 1080);   // a chat every 12-18 minutes (the first after ~7 min)
+const SURPRISE_TIMES = sipSchedule(24601, 1500, 2400, 5400);   // a hiccup, sneeze or lost Greg every 40-90 minutes
 /** how long a line stays up: long enough to read it */
 const lineLength = (ln) => ln[1] ? 1.6 + 0.065 * ln[1].length : 1.6;
 /** a chat that fits the moment, not one heard recently (time-of-day ones get first go) */
 function pickChat() {
-  const n = new Date();
-  const c = { hour: n.getHours(), day: n.getDay(), month: n.getMonth(), date: n.getDate(),
+  const n = today();
+  const c = { hour: n.getHours(), day: n.getDay(), month: n.getMonth(), date: n.getDate(), rain: isRainy(), hot: isHot(), cold: isCold(),
               activeMin: D.activeSince == null ? 0 : (performance.now() - D.activeSince) / 60000 };
   D.heard = D.heard || [];
   const fits = CHATS.filter(x => !x.when || x.when(c));
@@ -1093,7 +1201,34 @@ window.setMusic = (on, level, beat, bpm, bass) => {
   if (bpm > 40 && bpm < 220) MUSIC.bpm = bpm;
   if (on) lastActivityMs = performance.now();               // music wakes them up and keeps them awake
 };
-window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'chat') D.chatNow = true; if (name === 'jam') D.demoJam = performance.now() + 40000; };
+// Pats: the app tells us where you clicked; if it was on one of them, they react
+const raycaster = new THREE.Raycaster();
+window.pat = (x, y) => {
+  camera.updateMatrixWorld(); scene.updateMatrixWorld(true);
+  raycaster.setFromCamera(new THREE.Vector2(x / window.innerWidth * 2 - 1, y / window.innerHeight * 2 - 1), camera);
+  const shown = (o) => { for (let a = o; a; a = a.parent) if (!a.visible) return false; return true; };
+  const hit = raycaster.intersectObjects([bear, alien], true).find(h => h.object.isMesh && shown(h.object) && !(h.object.material && h.object.material.transparent));
+  if (!hit) return false;
+  let who = 'B';
+  for (let a = hit.object; a; a = a.parent) { if (a === croc) { who = 'G'; break; } if (a === alien) { who = 'N'; break; } if (a === bear) break; }
+  D.pat = { who, at: performance.now() / 1000 }; lastActivityMs = performance.now();
+  return true;
+};
+// Weather, from the app (Open-Meteo): WMO weather code, temperature in °C, daytime or not
+const WEATHER = { known: false, code: 0, temp: 20, day: true };
+window.setWeather = (code, temp, day) => { if (code === null) { WEATHER.known = false; return; } WEATHER.known = true; WEATHER.code = code; WEATHER.temp = temp; WEATHER.day = !!day; };
+const isRainy = () => (params.has('rain')) || (WEATHER.known && ((WEATHER.code >= 51 && WEATHER.code <= 67) || (WEATHER.code >= 80 && WEATHER.code <= 82) || WEATHER.code >= 95));
+const isHot = () => params.has('hot') || (WEATHER.known && WEATHER.temp >= 30 && WEATHER.day);
+const isCold = () => params.has('cold') || (WEATHER.known && WEATHER.temp <= 12);
+/** today's date, or a pretend one for testing (?date=12-25) */
+function today() {
+  const n = new Date();
+  if (params.has('date')) { const [m, d] = params.get('date').split('-').map(Number); n.setMonth(m - 1, d); }
+  if (params.has('hour')) n.setHours(+params.get('hour'), 0);
+  return n;
+}
+const isFestive = (n) => n.getMonth() === 11 || (n.getMonth() === 0 && n.getDate() <= 6);
+window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'presents') { D.giftScarf = D.giftHat = false; } if (name === 'chat') D.chatNow = true; if (name === 'jam') D.demoJam = performance.now() + 40000; };
 let lastActivityMs = performance.now();
 window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
@@ -1139,6 +1274,8 @@ function direct(t) {
       if (a.since < 0.1 && D.act === null) {
         D.act = ACTS[a.i % ACTS.length]; D.actStart = t;
         if (Math.min(D.bLevel ?? 1, D.nLevel ?? 1) < 0.4) D.act = 'refill';   // running low: time for a top-up
+        const td = today();
+        if (td.getMonth() === 11 && td.getDate() === 25 && !giftsOpened()) D.act = 'presents';   // Christmas morning!
         // evenings: story time or movie night (taking turns, about once an hour);
         // weekend daytime: a movie now and then (every couple of hours)
         const now = new Date(), h = now.getHours(), wd = now.getDay();
@@ -1160,12 +1297,12 @@ function direct(t) {
   const jamming = MUSIC.on && !act && D.sleep < 0.5 && bdayT === Infinity;   // the same stretch as on waking, once the mugs are down
 
   // Nom's crocodile: comes out for a cuddle, and always when Nom is asleep
-  const wantCroc = ((act === 'croc' || act === 'story' || act === 'movie') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories and watches movies too
+  const wantCroc = (act === 'presents' && actT > 5.5 && actT < ACT_LEN.presents - 2 * MUG_MOVE - 0.4) || ((act === 'croc' || act === 'story' || act === 'movie') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories and watches movies too
   // mugs: put down (bending over) before sleeping, stretching or cuddling Greg; picked up again afterwards
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
   const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2)
                   || (act === 'refill' && actT < 11.2)    // Barry sets his mug down next to Nom for a top-up
-                  || (act === 'movie' && actT < ACT_LEN.movie - MUG_MOVE - 0.2) || jamming || D.jamIn > 0;
+                  || (act === 'movie' && actT < ACT_LEN.movie - MUG_MOVE - 0.2) || (act === 'presents' && actT < ACT_LEN.presents - MUG_MOVE - 0.2) || jamming || D.jamIn > 0;
   const wantPot = act === 'refill' && actT < 9.6;
   const nomWants = bearWants || wantCroc || D.croc > 0 || wantPot || D.pot > 0;
   // instruments come out once the mugs are down, and go away before they're picked up
@@ -1237,6 +1374,11 @@ function direct(t) {
   if (nowMs - mouseMovedAt > 5 * 60000) D.activeSince = null; else if (D.activeSince == null) D.activeSince = nowMs;
   if (!params.has('preview') && !params.has('rest') && lastStart(t, CHAT_TIMES).since < 0.1) D.chatDueAt = t;
   const freeToChat = !act && !MUSIC.on && D.sleep < 0.05 && bdayT === Infinity && wakeT > 6 && D.bMug < 0.05 && D.nMug < 0.05 && !(waveT < 4.5);
+  if (!params.has('preview') && !params.has('rest') && lastStart(t, SURPRISE_TIMES).since < 0.1) D.surpriseDueAt = t;
+  if (D.surpriseDueAt != null && t - D.surpriseDueAt < 300 && freeToChat && !D.chat) {
+    D.chat = { conv: SURPRISES[Math.floor(Math.random() * SURPRISES.length)], start: t }; D.surpriseDueAt = null;
+  }
+  if (params.has('surprise')) D.chat = { conv: SURPRISES[+params.get('surprise')], start: t - +(params.get('ct') || 0) };
   if ((D.chatNow || (D.chatDueAt != null && t - D.chatDueAt < 120)) && freeToChat && !D.chat) {
     D.chat = { conv: pickChat(), start: t }; D.chatNow = false; D.chatDueAt = null;
   }
@@ -1248,19 +1390,29 @@ function direct(t) {
       let ct = t - D.chat.start;
       for (const ln of D.chat.conv.lines) {
         const len = lineLength(ln);
-        if (ct < len) { chat = { who: ln[0], text: ln[1], bFace: ln[2] || 'normal', nFace: ln[3] || 'normal', lineT: ct, len }; break; }
+        if (ct < len) { chat = { who: ln[0], text: ln[1], bFace: ln[2] || 'normal', nFace: ln[3] || 'normal', lineT: ct, len,
+                                 fx: D.chat.conv.fx, line: D.chat.conv.lines.indexOf(ln) }; break; }
         ct -= len;
       }
-      if (!chat && !params.has('chat')) { if (D.chat.conv.then) D.pendingAct = D.chat.conv.then; D.chat = null; }
+      if (!chat && !params.has('chat') && !params.has('surprise')) { if (D.chat.conv.then) D.pendingAct = D.chat.conv.then; D.chat = null; }
     }
   }
 
+  // presents: Barry's box opens at 2.5 s (a scarf!), Nom's at 5.5 s (a Santa hat for Greg, who comes out to wear it)
+  const presentsT = act === 'presents' ? actT : Infinity;
+  if (presentsT > 2.5 && presentsT < 100) D.giftScarf = true;
+  if (presentsT > 5.5 && presentsT < 100) { D.giftHat = true; markGiftsOpened(); }
+  // New Year: party hats from 6 pm on New Year's Eve, fireworks for the first 20 minutes of the year
+  const td2 = today();
+  const nyeEvening = td2.getMonth() === 11 && td2.getDate() === 31 && td2.getHours() >= 18;
+  const midnight = params.has('fireworks') || (td2.getMonth() === 0 && td2.getDate() === 1 && td2.getHours() === 0 && td2.getMinutes() < 20);
   const toastT = act === 'toast' ? actT : Infinity;
   const toastTurn = toastT < 5 ? smooth(Math.min(toastT / 1.0, (5 - toastT) / 1.0)) : 0;
   const toastRaise = toastT < 5 ? Math.max(0.5 * smooth(Math.min((toastT - 0.4) / 0.8, (4.2 - toastT) / 0.6)),
                                             smooth(Math.min((toastT - 1.9) / 0.6, (3.6 - toastT) / 0.6))) : 0;
   const clink = toastT < 5 ? Math.max(0, 1 - Math.abs(toastT - 1.6) / 0.35) : 0;
-  return { sleep: D.sleep, bdayT, cheer, party, thanks, hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats'),
+  return { sleep: D.sleep, bdayT, cheer: Math.max(cheer, midnight && D.sleep < 0.5 ? 0.7 * smooth(Math.sin(t * 0.8) * 2) : 0), party, thanks,
+           hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats') || nyeEvening || midnight, presentsT, midnight,
            stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
            toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze,
            pot: D.pot || 0, pourBarry, pourNom, holdOut, chat, movieT, tvOn, bowl, scary, watching, jamIn: D.jamIn || 0, jamSet: D.jamSet || 'party', waveN, waveB, waveT, dt };
@@ -1344,6 +1496,13 @@ function placeMug(mug, arms, hold, floorSpot, k) {
 
 function pose(t) {
   const W = direct(t); window.__W = W;
+  // a pat: how long ago, and who
+  const patAge = params.has('pat') ? +(params.get('pt') || 0.3) : (D.pat ? performance.now() / 1000 - D.pat.at : 99);
+  const patWho = params.has('pat') ? params.get('pat') : (D.pat ? D.pat.who : null);
+  const patB = patWho === 'B' && patAge < 1.6, patN = patWho === 'N' && patAge < 1.8, patG = patWho === 'G' && patAge < 1.6;
+  const squish = patB ? 0.1 * Math.sin(patAge * 13) * Math.exp(-patAge * 2.6) : 0;
+  const now = today(), hour = now.getHours();
+  const night = hour >= 18 || hour < 5, dark = hour >= 19 || hour < 6;
   // the beat (when jamming): a quick pulse on each beat, and a slow sway every two beats
   const sinceBeat = params.has('jam') ? (t % (60 / 112)) : (performance.now() - MUSIC.lastBeat) / 1000;
   const beat = Math.exp(-sinceBeat / 0.13) * W.jamIn;
@@ -1363,7 +1522,7 @@ function pose(t) {
   const breath = 1 + (0.012 + 0.014 * zz) * Math.sin(t * (1.6 - 0.8 * zz));   // slower, deeper breaths when asleep
   const tall = 1 + 0.045 * W.stretch;          // stretching up tall
   const bSquash = 1 - 0.09 * Math.sin(Math.PI * W.bMug);   // squashes down a little as he bends over
-  bearBody.scale.set((1 + (breath - 1) * 0.5) / Math.sqrt(tall) / Math.sqrt(bSquash), breath * tall * bSquash, 1);
+  bearBody.scale.set((1 + (breath - 1) * 0.5) / Math.sqrt(tall) / Math.sqrt(bSquash) * (1 + squish * 0.6), breath * tall * bSquash * (1 - squish), 1);
   bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown) ;   // nods asleep, leans back to stretch, bends to reach the floor
   bearBody.rotation.x += 0.05 * beat;   // head-bopping to the music
   bearBody.rotation.z = 0.045 * sway - 0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
@@ -1453,8 +1612,12 @@ function pose(t) {
     const sz = 0.7 * (0.7 + 0.3 * bub); bubble.scale.set(sz, sz, sz); bubble.material.opacity = bub;
   }
   const bFace = W.chat ? W.chat.bFace : 'normal';
-  const happy = (W.jamIn > 0.5) || (bFace === 'happy' && !chatting) || (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5 && W.holdOut < 0.5) || W.waveB > 0.5 || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
-  const sleepy = !happy && (zz > 0.5 || bFace === 'sleepy' || blinking(t, 4.7, 1));
+  const happy = patB || (W.jamIn > 0.5) || (bFace === 'happy' && !chatting) || (bs > 0.5 && W.cheer < 0.5 && W.bookOut < 0.5 && W.holdOut < 0.5) || W.waveB > 0.5 || W.party > 0.5 || W.thanks > 0.5 || W.yawn > 0.3 || W.stretch > 0.5;
+  const ls = lastStart(t, BEAR_SIPS);
+  const nodding = (hour >= 22 || hour < 2) && !params.has('preview') && !params.has('rest') && ls.i % 3 === 1 && ls.since > 1.0 && ls.since < 2.5;
+  if (nodding) bearBody.rotation.x += 0.14 * smooth((ls.since - 1.0) / 0.5);   // dozing off mid-sip…
+  if ((hour >= 22 || hour < 2) && ls.i % 3 === 1 && ls.since > 2.5 && ls.since < 2.9) bearBody.rotation.z += 0.05 * Math.sin((ls.since - 2.5) * 40);   // …and jolting awake
+  const sleepy = !happy && (zz > 0.5 || nodding || bFace === 'sleepy' || blinking(t, 4.7, 1));
   bearEyes.forEach((e, i) => {
     e.visible = !happy && !sleepy;
     // his eyes follow your pointer too (a small shift on his face)
@@ -1475,6 +1638,53 @@ function pose(t) {
   bearSleepy.forEach(e => (e.visible = sleepy));
   updateSteam(t, (1 - bs) * (1 - bearDown) * (1 + 0.8 * W.holdOut));
   bearHat.visible = alienHat.visible = W.hats;
+  // cocoa with a marshmallow in the evening, coffee the rest of the day
+  M.coffee.color.setHex(night ? 0x6b3f22 : C.coffee);
+  bearMug.userData.marsh.visible = alienMug.userData.marsh.visible = night;
+  // the lamp after dark
+  lamp.visible = dark;
+  if (dark) { const fl = 0.95 + 0.05 * Math.sin(t * 3.1); lampLight.intensity = 1.8 * fl; lampGlow.material.opacity = 0.5 * fl; }
+  // weather
+  const rainy = isRainy(), hot = isHot(), cold = isCold();
+  rain.forEach(d => { d.visible = rainy; if (!rainy) return; const u = d.userData, y = 3.4 - ((t * u.speed + u.off) % 3.6); d.position.set(u.x + y * 0.12, y, u.z); });
+  bearSunnies.visible = hot && W.sleep < 0.5; nomSunnies.forEach(l => (l.visible = hot && W.sleep < 0.5));
+  // the festive season (1 Dec - 6 Jan): Santa hats, the tree, and presents on Christmas Day
+  const festive = isFestive(now);
+  bearSanta.visible = festive && !W.hats; nomSanta.visible = festive && !W.hats;
+  bearScarf.visible = !!(cold || (festive && D.giftScarf));
+  bearScarf.scale.setScalar(1); if (W.presentsT < 4) bearScarf.scale.setScalar(Math.max(0.01, smooth((W.presentsT - 2.5) / 0.6)));
+  bearScarf.scale.x *= 1.08; bearScarf.scale.z *= 0.87;
+  nomScarf.visible = cold;
+  gregSanta.visible = !!(festive && (D.giftHat || params.has("gifthat")));
+  tree.visible = festive && !tv.visible;
+  if (tree.visible) treeLights.forEach((b, i) => b.material.color.copy(b.userData.col).multiplyScalar(0.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 2.2 + i * 1.7))));
+  const xmas = now.getMonth() === 11 && now.getDate() === 25;
+  gifts.forEach((g, i) => {
+    const openAt = i === 0 ? 2.5 : 5.5, since = isFinite(W.presentsT) ? W.presentsT - openAt : -1;
+    g.visible = tree.visible && xmas && (!giftsOpened() || since < 1.2);
+    if (!g.visible) return;
+    g.userData.lid.position.y = 0.24 + (since > 0 ? since * 1.6 : 0); g.userData.lid.rotation.z = since > 0 ? since * 4 : 0;
+    g.scale.setScalar(since > 0.3 ? Math.max(0.01, 1 - (since - 0.3) / 0.6) : 1);
+  });
+  // hearts for pats
+  hearts.forEach((h, i) => {
+    const age = patAge - i * 0.18; h.visible = (patB || patN || patG) && age > 0 && age < 1.4;
+    if (!h.visible) return;
+    const head = patWho === 'B' ? bearBody.localToWorld(_zp.set(0.2 * (i - 1), 2.7, 0.5)) : patWho === 'N' ? alienBody.localToWorld(_zp.set(0.15 * (i - 1), 1.7, 0.3)) : croc.localToWorld(_zp.set(0.3, 0.6, 0.1));
+    h.position.set(head.x + 0.12 * Math.sin(age * 5 + i), head.y + age * 0.5, head.z + 0.2);
+    const sz = 0.2 * Math.min(1, age / 0.15); h.scale.set(sz, sz, sz); h.material.opacity = Math.min(1, (1.4 - age) / 0.4);
+  });
+  // New Year fireworks
+  fireworks.forEach((f, i) => {
+    f.visible = W.midnight;
+    if (!f.visible) return;
+    const burst = Math.floor(i / 16), period = 2.4, phase = (t + burst * 0.8) % period, n = Math.floor((t + burst * 0.8) / period);
+    const r = (k) => { const x = Math.sin((n * 7 + burst) * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
+    const a = (i % 16) / 16 * Math.PI * 2, sp = 0.6 + 0.3 * r(3);
+    f.position.set(-2.2 + r(1) * 3.6 + Math.cos(a) * sp * phase, 2.3 + r(2) * 0.7 + Math.sin(a) * sp * phase - 0.25 * phase * phase, -2.2);
+    f.material.color.setHSL(r(4), 0.9, 0.6); f.material.opacity = Math.max(0, 1 - phase / 1.6);
+    const sz = 0.16 * (1 - phase / 2.4); f.scale.set(sz, sz, sz);
+  });
   // maracas in Nom's paws, shaken on the beat
   uke.visible = strum; uke.scale.setScalar(1.45 * (0.4 + 0.6 * W.jamIn)); uke.rotation.z = -0.45 + 0.03 * beat;
   maracas.forEach((m, i) => { m.visible = W.jamIn > 0.01 && W.jamSet !== 'band' && (W.jamSet === 'party' || i === 1); m.scale.setScalar(0.4 + 0.6 * W.jamIn); m.rotation.x = 0.5 * beat * Math.sin(t * 36 + i * 2); });
@@ -1510,7 +1720,7 @@ function pose(t) {
     flyKernel.rotation.set(t * 9, t * 7, 0);
   }
   // Halloween week: the jack-o'-lantern (lit after dark); bats flit about on the 31st
-  const now = new Date(), mon = now.getMonth(), day = now.getDate(), hr = now.getHours();
+  const mon = now.getMonth(), day = now.getDate(), hr = now.getHours();
   const halloween = params.has('halloween') || (mon === 9 && day >= 24);
   pumpkin.visible = halloween && !tv.visible;
   if (halloween) {
@@ -1553,6 +1763,7 @@ function pose(t) {
   const nz = Math.max(zz, W.doze);                   // asleep, or dozing off during the story
   if (W.party > 0.3 || W.thanks > 0.3) { mood = 'giggle'; moodT = (W.thanks > 0.3 ? t : W.bdayT) % 3.6; }   // giggly on birthdays
   const nFace = W.chat ? W.chat.nFace : null;
+  if (patN && !W.chat) { mood = 'giggle'; moodT = 0.4 + patAge; }
   if (nFace) { mood = { curious: 'curious', wonder: 'curious', giggle: 'giggle', sleepy: 'sleepy', groan: 'sleepy' }[nFace] || null; moodT = 1.5 + (nFace === 'giggle' ? W.chat.lineT % 1.8 : 0); }
   const nomTalking = W.chat && W.chat.who === 'N' && W.chat.text && W.chat.lineT < W.chat.len - 0.5;
   const ease = mood ? smooth(Math.min(moodT / 0.4, (3.6 - moodT) / 0.4)) : 0;   // fade in and out
@@ -1561,6 +1772,9 @@ function pose(t) {
   const hopping = false;   // the little hop is switched off
   alien.position.y = (hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0) + 0.16 * W.pourBarry;   // up on tiptoes to reach Barry's mug
   if (mood === 'giggle') alien.position.y += Math.abs(Math.sin(moodT * 16)) * 0.035 * ease;   // little giggly bounce
+  const fx = W.chat && W.chat.fx;
+  if (fx === 'hiccup' && /hic/.test(W.chat.text) && W.chat.lineT < 0.35) alien.position.y += 0.09 * Math.sin(Math.PI * W.chat.lineT / 0.35);   // hic!
+  if (patN) alien.position.y += 0.05 * Math.abs(Math.sin(patAge * 9)) * Math.exp(-patAge * 1.5);
   alien.position.y += 0.07 * beat;                                                              // bouncing to the beat
   let tilt = params.has('rest') ? 0 : 0.035 * Math.sin(t * 1.3);
   if (mood === 'curious') tilt += 0.14 * ease;                  // head tilt
@@ -1580,6 +1794,8 @@ function pose(t) {
   // bending down for the mug, and turning round to fetch Greg from behind (or put him back)
   const reach = Math.sin(Math.PI * smooth(Math.max(W.croc, W.pot)));
   alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach;
+  if (fx === 'sneeze' && W.chat.line === 0) alienBody.rotation.x -= 0.14 * smooth(W.chat.lineT / W.chat.len);            // ah… ah…
+  if (fx === 'sneeze' && W.chat.line === 1) alienBody.rotation.x += 0.2 * Math.exp(-W.chat.lineT * 4) - 0.14 * Math.exp(-W.chat.lineT * 12);   // ACHOO!
   alienBody.rotation.y = -1.25 * reach;
   pivotAbout(alienBody, NOM_BEND_AT);
   alienArms.rotation.x = -ALIEN_ARM_LIFT * us;
@@ -1637,6 +1853,7 @@ function pose(t) {
     croc.position.y += 0.36 * W.scary; croc.position.z += 0.1 * W.scary;   // hiding behind Greg
     croc.rotation.set(...lerp3(CROC_AWAY.r, CROC_HUG.r, k));
     const sq = cuddle ? 1 - 0.05 * Math.max(0, Math.sin(t * 4.4)) : 1;   // a squeeze now and then
+    if (patG) croc.rotation.z += 0.3 * Math.sin(patAge * 15) * Math.exp(-patAge * 2.5);   // Greg wobbles
     croc.scale.set(CROC_SCALE * sq, CROC_SCALE / sq, CROC_SCALE);
   }
 
@@ -1668,7 +1885,8 @@ function pose(t) {
     happy.visible = happyEyes;
     sleepy.visible = sleepyEyes && !happyEyes;
     white.scale.set(EYE_R * wide, EYE_R * wide, 0.055);
-    if (W.scary > 0.3) placePupil(pupil, 0.08, 0.02);                          // peeking over Greg
+    if (fx === 'search' && W.chat.line === 0) placePupil(pupil, 0.11 * Math.sin(t * 4), 0.0);   // looking all around for Greg
+    else if (W.scary > 0.3) placePupil(pupil, 0.08, 0.02);                          // peeking over Greg
     else if (W.watching > 0.5) placePupil(pupil, 0.1, -0.03);                  // watching the TV
     else if (W.bookOut > 0.5) placePupil(pupil, 0.08, -0.03);                      // looking at the pictures in the book
     else if (W.pourNom > 0.3) placePupil(pupil, 0, -0.1);                      // watching its own mug fill up
@@ -1701,7 +1919,7 @@ const outline = STYLE === 'toon' ? new OutlineEffect(renderer, { defaultThicknes
 function renderAt(t) { pose(t); (outline || renderer).render(scene, camera); }
 window.renderAt = renderAt;
 window.__params = params;   // (for test stills)
-window.__pose = pose; window.__D = D;       // (for stepping through time in tests without drawing)
+window.__pose = pose; window.__D = D; window.__dbg = { bearScarf, nomScarf };       // (for stepping through time in tests without drawing)
 
 if (!params.has('preview')) {
   const start = performance.now();
