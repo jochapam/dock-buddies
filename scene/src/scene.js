@@ -859,19 +859,37 @@ const rain = Array.from({ length: 46 }, (_, i) => {
   m.userData = { x: -3 + r(1) * 5.1, z: -1.2 - r(2) * 0.8, speed: 2.4 + r(3) * 0.8, off: r(4) * 3.4 };
   m.rotation.z = 0.12; m.visible = false; scene.add(m); return m;
 });
-const shades = new THREE.MeshPhongMaterial({ color: 0x1b1b24, shininess: 90, specular: 0x8899aa });
-const bearSunnies = new THREE.Group(); bearBody.add(bearSunnies);
-for (const sx of [-1, 1]) {
-  const lens = new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.22, 0.03, 3, 0.07), shades);
-  lens.position.set(sx * EYE.x, EYE.y, fz(EYE.x, EYE.y) + 0.06); lens.rotation.y = sx * 0.4; bearSunnies.add(lens);
+// proper little round sunglasses: dark lenses with a glint, a black frame, a bridge and arms
+const shadeLens = new THREE.MeshPhongMaterial({ color: 0x23262f, shininess: 120, specular: 0x6f7f99 });
+const shadeFrame = new THREE.MeshPhongMaterial({ color: 0x111114, shininess: 60, specular: 0x444444 });
+const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
+function sunnyLens(r) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CircleGeometry(r, 32), shadeLens));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.13, 10, 40), shadeFrame); g.add(rim);
+  const glint = new THREE.Mesh(new THREE.PlaneGeometry(r * 0.22, r * 0.9), glintMat);
+  glint.position.set(-r * 0.35, r * 0.25, 0.004); glint.rotation.z = -0.6; g.add(glint);
+  return g;
 }
-{ const br = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.035, 0.03), shades); br.position.set(0, EYE.y + 0.04, fz(0, EYE.y) + 0.06); bearSunnies.add(br); }
+const bearSunnies = new THREE.Group(); bearBody.add(bearSunnies);
+{
+  const r = 0.15, y = EYE.y + 0.01;
+  for (const sx of [-1, 1]) {
+    const lens = sunnyLens(r);
+    lens.position.set(sx * EYE.x, y, fz(EYE.x, y) + 0.055); lens.rotation.y = sx * 0.42; bearSunnies.add(lens);
+    // an arm running back towards his ear
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.42, 8), shadeFrame);
+    arm.position.set(sx * (EYE.x + 0.2), y + 0.03, fz(EYE.x, y) - 0.12); arm.rotation.set(Math.PI / 2, sx * 0.55, 0); bearSunnies.add(arm);
+  }
+  const bridge = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.016, 8, 20, Math.PI), shadeFrame);
+  bridge.position.set(0, y + 0.01, fz(0, y) + 0.06); bearSunnies.add(bridge);
+}
 bearSunnies.visible = false;
-const nomSunnies = alienEyes.map(({ s }) => {
-  const parent = alienEyes.find(e => e.s === s).white.parent;
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.235, 0.235, 0.03, 32), shades);
-  lens.rotation.x = Math.PI / 2; lens.position.z = 0.07; lens.visible = false; parent.add(lens); return lens;
+const nomSunnies = alienEyes.map(({ white }) => {
+  const lens = sunnyLens(0.2); lens.position.z = 0.07; lens.visible = false; white.parent.add(lens); return lens;
 });
+const nomBridge = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.016, 8, 20, Math.PI), shadeFrame);
+nomBridge.position.set(0, 1.13, alienFrontZ(0, 1.13) + 0.04); nomBridge.visible = false; alienBody.add(nomBridge);
 function scarf(radius, tube, sx, sz, parent, y) {
   const c = document.createElement('canvas'); c.width = 64; c.height = 8; const g = c.getContext('2d');
   for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#ffffff' : '#d8343a'; g.fillRect(i * 8, 0, 8, 8); }
@@ -1647,7 +1665,7 @@ function pose(t) {
   // weather
   const rainy = isRainy(), hot = isHot(), cold = isCold();
   rain.forEach(d => { d.visible = rainy; if (!rainy) return; const u = d.userData, y = 3.4 - ((t * u.speed + u.off) % 3.6); d.position.set(u.x + y * 0.12, y, u.z); });
-  bearSunnies.visible = hot && W.sleep < 0.5; nomSunnies.forEach(l => (l.visible = hot && W.sleep < 0.5));
+  bearSunnies.visible = hot && W.sleep < 0.5; nomSunnies.forEach(l => (l.visible = hot && W.sleep < 0.5)); nomBridge.visible = hot && W.sleep < 0.5;
   // the festive season (1 Dec - 6 Jan): Santa hats, the tree, and presents on Christmas Day
   const festive = isFestive(now);
   bearSanta.visible = festive && !W.hats; nomSanta.visible = festive && !W.hats;
