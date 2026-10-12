@@ -277,7 +277,13 @@ function addFuzz(posesObj, color, len, density, vertexColors) {
 const gloss = (color, rough = 0.2) => new THREE.MeshPhysicalMaterial({ color, roughness: rough, clearcoat: 1, clearcoatRoughness: 0.06 });
 const M = { black: gloss(C.black, 0.22), white: gloss(C.white, 0.15), ceramic: gloss(C.mug, 0.3),
             coffee: gloss(C.coffee, 0.04), tooth: gloss(C.tooth, 0.3),
-            mouth: new THREE.MeshStandardMaterial({ color: 0x050303, roughness: 0.85 }) };
+            mouth: new THREE.MeshStandardMaterial({ color: 0x050303, roughness: 0.85 }),
+            glass: new THREE.MeshPhysicalMaterial({ color: 0xe6f6ff, roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }),
+            iced: gloss(0xb57a48, 0.08),
+            ice: new THREE.MeshPhysicalMaterial({ color: 0xf2fbff, roughness: 0.08, clearcoat: 1, transparent: true, opacity: 0.8 }),
+            straw: new THREE.MeshToonMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = 8; c.height = 64; const x = c.getContext('2d');
+              for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#ffffff' : '#ff5f7e'; x.fillRect(0, i * 8, 8, 8); } return new THREE.CanvasTexture(c); })() }),
+            lemon: new THREE.MeshToonMaterial({ color: 0xffe14d }) };
 function solid(mat, [x, y, z], [sx, sy, sz], parent) {
   const m = new THREE.Mesh(SPH, mat);
   m.position.set(x, y, z); m.scale.set(sx, sy, sz);
@@ -289,12 +295,32 @@ function mug(r, h, parent) {
   const g = new THREE.Group();
   const prof = [[0, -h / 2], [r * 0.88, -h / 2], [r * 0.97, -h / 2 + 0.025], [r, -h / 2 + 0.07], [r, h / 2 - 0.02],
                 [r * 0.985, h / 2], [r * 0.9, h / 2], [r * 0.875, h / 2 - 0.05]].map(([x, y]) => new THREE.Vector2(x, y));
-  g.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 56), M.ceramic));
+  const body = new THREE.Mesh(new THREE.LatheGeometry(prof, 56), M.ceramic); g.add(body);
   const coffee = new THREE.Mesh(new THREE.CircleGeometry(r * 0.88, 48), M.coffee);
   coffee.rotation.x = -Math.PI / 2; coffee.position.y = h / 2 - 0.055;
   g.add(coffee);
   // how full it is (1 = full): the coffee sinks as they drink, and rises again with a refill
-  g.userData.setLevel = (k) => { coffee.position.y = (-h / 2 + 0.05) + (h - 0.105) * k; coffee.scale.setScalar(0.97 + 0.03 * k); };
+  // hot days: the same mug becomes a glass of iced coffee with ice cubes, a straw and a lemon wheel
+  const iced = new THREE.Group(); iced.visible = false; g.add(iced);
+  const gp = [[0, -h / 2], [r * 0.86, -h / 2], [r * 0.9, -h / 2 + 0.02], [r * 1.0, h / 2], [r * 0.95, h / 2],
+              [r * 0.86, -h / 2 + 0.06], [0, -h / 2 + 0.06]].map(([x, y]) => new THREE.Vector2(x, y));
+  const glass = new THREE.Mesh(new THREE.LatheGeometry(gp, 48), M.glass); glass.renderOrder = 2; iced.add(glass);
+  const drinkGeo = new THREE.CylinderGeometry(r * 0.9, r * 0.84, 1, 40); drinkGeo.translate(0, 0.5, 0);
+  const drink = new THREE.Mesh(drinkGeo, M.iced); drink.position.y = -h / 2 + 0.06; iced.add(drink);
+  const ice = new THREE.Group(); iced.add(ice);
+  for (const [x, z, a] of [[-0.3, 0.25, 0.4], [0.32, 0.1, 1.1], [0.0, -0.32, 2.0]]) {
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(r * 0.46, r * 0.4, r * 0.46), M.ice);
+    cube.position.set(x * r, 0, z * r); cube.rotation.set(0.3, a, 0.2); ice.add(cube);
+  }
+  const straw = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.075, r * 0.075, h * 1.05, 12), M.straw);
+  straw.position.set(-r * 0.42, h * 0.3, r * 0.1); straw.rotation.set(0.15, 0, 0.32); iced.add(straw);
+  const lemon = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.38, r * 0.38, r * 0.1, 24), M.lemon);
+  lemon.rotation.set(Math.PI / 2, 0, 0.5); lemon.position.set(r * 0.72, h / 2 - r * 0.05, r * 0.35); iced.add(lemon);
+  g.userData.setCold = (on) => { body.visible = coffee.visible = handle.visible = !on; iced.visible = on; };
+  g.userData.setLevel = (k) => {
+    coffee.position.y = (-h / 2 + 0.05) + (h - 0.105) * k; coffee.scale.setScalar(0.97 + 0.03 * k);
+    drink.scale.y = 0.01 + (h - 0.11) * k; ice.position.y = -h / 2 + 0.06 + (h - 0.11) * Math.max(k, 0.25) - r * 0.12;
+  };
   const marsh = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.24, r * 0.24, r * 0.22, 16), new THREE.MeshToonMaterial({ color: 0xfff6ea, gradientMap: TOON_BANDS.cel }));
   marsh.rotation.x = Math.PI / 2; marsh.position.set(r * 0.25, -r * 0.1, r * 0.06); coffee.add(marsh);   // floats on the cocoa
   marsh.visible = false; g.userData.marsh = marsh;
@@ -1670,11 +1696,13 @@ function pose(t) {
   });
   bearHappy.forEach(e => (e.visible = happy));
   bearSleepy.forEach(e => (e.visible = sleepy));
-  updateSteam(t, (1 - bs) * (1 - bearDown) * (1 + 0.8 * W.holdOut));
+  updateSteam(t, isHot() ? 0 : (1 - bs) * (1 - bearDown) * (1 + 0.8 * W.holdOut));
   bearHat.visible = alienHat.visible = W.hats;
   // cocoa with a marshmallow in the evening, coffee the rest of the day
   M.coffee.color.setHex(night ? 0x6b3f22 : C.coffee);
-  bearMug.userData.marsh.visible = alienMug.userData.marsh.visible = night;
+  const icedDay = isHot();   // a cold drink on a scorcher (no steam)
+  bearMug.userData.marsh.visible = alienMug.userData.marsh.visible = night && !icedDay;
+  bearMug.userData.setCold(icedDay); alienMug.userData.setCold(icedDay);
   // the lamp after dark
   lamp.visible = dark;
   if (dark) { const fl = 0.95 + 0.05 * Math.sin(t * 3.1); lampLight.intensity = 1.8 * fl; lampGlow.material.opacity = 0.5 * fl; }
