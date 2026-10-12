@@ -859,37 +859,53 @@ const rain = Array.from({ length: 46 }, (_, i) => {
   m.userData = { x: -3 + r(1) * 5.1, z: -1.2 - r(2) * 0.8, speed: 2.4 + r(3) * 0.8, off: r(4) * 3.4 };
   m.rotation.z = 0.12; m.visible = false; scene.add(m); return m;
 });
-// proper little round sunglasses: dark lenses with a glint, a black frame, a bridge and arms
-const shadeLens = new THREE.MeshPhongMaterial({ color: 0x23262f, shininess: 120, specular: 0x6f7f99 });
-const shadeFrame = new THREE.MeshPhongMaterial({ color: 0x111114, shininess: 60, specular: 0x444444 });
-const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
-function sunnyLens(r) {
+// sunglasses with a chunky coloured frame (so they read as glasses, not big eyes): rounded-square lenses,
+// a thick rim with a heavier brow bar, a bridge and arms
+const shadeLens = new THREE.MeshPhongMaterial({ color: 0x2c3c4e, shininess: 140, specular: 0x8fa4c4 });
+const bearFrameMat = new THREE.MeshPhongMaterial({ color: 0xd8443a, shininess: 70, specular: 0x553333 });
+const nomFrameMat = new THREE.MeshPhongMaterial({ color: 0xf3c12e, shininess: 70, specular: 0x554422 });
+const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+function roundRect(w, h, rad) {
+  const sh = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  sh.moveTo(x + rad, y); sh.lineTo(x + w - rad, y); sh.quadraticCurveTo(x + w, y, x + w, y + rad);
+  sh.lineTo(x + w, y + h - rad); sh.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  sh.lineTo(x + rad, y + h); sh.quadraticCurveTo(x, y + h, x, y + h - rad);
+  sh.lineTo(x, y + rad); sh.quadraticCurveTo(x, y, x + rad, y); return sh;
+}
+function sunnyLens(r, frameMat) {
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.CircleGeometry(r, 32), shadeLens));
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.13, 10, 40), shadeFrame); g.add(rim);
-  const glint = new THREE.Mesh(new THREE.PlaneGeometry(r * 0.22, r * 0.9), glintMat);
-  glint.position.set(-r * 0.35, r * 0.25, 0.004); glint.rotation.z = -0.6; g.add(glint);
+  const w = r * 2.25, h = r * 1.8, t = r * 0.26;
+  const outer = roundRect(w, h, r * 0.55);
+  const innerW = w - 2 * t, innerH = h - t * 1.6 - t; // heavier brow at the top
+  const inner = roundRect(innerW, innerH, r * 0.4);
+  const holePath = new THREE.Path(inner.getPoints(12).map(p => new THREE.Vector2(p.x, p.y - t * 0.3)));
+  outer.holes.push(holePath);
+  const frame = new THREE.Mesh(new THREE.ExtrudeGeometry(outer, { depth: r * 0.16, bevelEnabled: true, bevelThickness: r * 0.05, bevelSize: r * 0.05, bevelSegments: 2, curveSegments: 12 }), frameMat);
+  frame.position.z = -r * 0.08; g.add(frame);
+  const lens = new THREE.Mesh(new THREE.ShapeGeometry(inner, 12), shadeLens); lens.position.set(0, -t * 0.3, 0); g.add(lens);
+  const glint = new THREE.Mesh(new THREE.PlaneGeometry(r * 0.2, r * 0.8), glintMat);
+  glint.position.set(-r * 0.4, 0, 0.004); glint.rotation.z = -0.6; g.add(glint);
   return g;
 }
 const bearSunnies = new THREE.Group(); bearBody.add(bearSunnies);
 {
-  const r = 0.15, y = EYE.y + 0.01;
+  const r = 0.17, y = EYE.y + 0.01;
   for (const sx of [-1, 1]) {
-    const lens = sunnyLens(r);
-    lens.position.set(sx * EYE.x, y, fz(EYE.x, y) + 0.055); lens.rotation.y = sx * 0.42; bearSunnies.add(lens);
+    const lens = sunnyLens(r, bearFrameMat);
+    lens.position.set(sx * EYE.x, y, fz(EYE.x, y) + 0.06); lens.rotation.y = sx * 0.42; bearSunnies.add(lens);
     // an arm running back towards his ear
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.42, 8), shadeFrame);
-    arm.position.set(sx * (EYE.x + 0.2), y + 0.03, fz(EYE.x, y) - 0.12); arm.rotation.set(Math.PI / 2, sx * 0.55, 0); bearSunnies.add(arm);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.42), bearFrameMat);
+    arm.position.set(sx * (EYE.x + 0.25), y + 0.07, fz(EYE.x, y) - 0.12); arm.rotation.y = sx * 0.55; bearSunnies.add(arm);
   }
-  const bridge = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.016, 8, 20, Math.PI), shadeFrame);
-  bridge.position.set(0, y + 0.01, fz(0, y) + 0.06); bearSunnies.add(bridge);
+  const bridge = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.024, 8, 20, Math.PI), bearFrameMat);
+  bridge.position.set(0, y + 0.03, fz(0, y) + 0.07); bearSunnies.add(bridge);
 }
 bearSunnies.visible = false;
 const nomSunnies = alienEyes.map(({ white }) => {
-  const lens = sunnyLens(0.2); lens.position.z = 0.07; lens.visible = false; white.parent.add(lens); return lens;
+  const lens = sunnyLens(0.19, nomFrameMat); lens.position.z = 0.07; lens.visible = false; white.parent.add(lens); return lens;
 });
-const nomBridge = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.016, 8, 20, Math.PI), shadeFrame);
-nomBridge.position.set(0, 1.13, alienFrontZ(0, 1.13) + 0.04); nomBridge.visible = false; alienBody.add(nomBridge);
+const nomBridge = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.022, 8, 20, Math.PI), nomFrameMat);
+nomBridge.position.set(0, 1.14, alienFrontZ(0, 1.14) + 0.05); nomBridge.visible = false; alienBody.add(nomBridge);
 function scarf(radius, tube, sx, sz, parent, y) {
   const c = document.createElement('canvas'); c.width = 64; c.height = 8; const g = c.getContext('2d');
   for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#ffffff' : '#d8343a'; g.fillRect(i * 8, 0, 8, 8); }
