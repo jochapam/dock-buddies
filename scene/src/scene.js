@@ -958,6 +958,62 @@ function santaHat(r, h, parent) {
 const bearSanta = santaHat(0.3, 0.55, bearBody); bearSanta.position.set(-0.3, 2.48, 0.3); bearSanta.rotation.set(0.15, 0, 0.45);
 const nomSanta = santaHat(0.22, 0.42, alienBody); nomSanta.position.set(0, 1.4, 0.08); nomSanta.rotation.x = 0.12;
 const gregSanta = santaHat(0.09, 0.18, croc); gregSanta.position.set(0.44, 0.42, 0.02); gregSanta.rotation.z = -0.3;
+// Halloween costumes (the pumpkin week): Barry is a vampire (cape with a tall red-lined collar, little fangs),
+// Nom is his bat (flapping wings), and Greg gets a tiny witch's hat
+const capeBlack = new THREE.MeshToonMaterial({ color: 0x1c1822, gradientMap: TOON_BANDS.cel, side: THREE.FrontSide });
+const capeRed = new THREE.MeshToonMaterial({ color: 0xb3202e, gradientMap: TOON_BANDS.cel, side: THREE.BackSide });
+const vampire = new THREE.Group(); bearBody.add(vampire); vampire.visible = false;
+{
+  const layer = (geo, y) => { for (const m of [capeBlack, capeRed]) { const mesh = new THREE.Mesh(geo, m); mesh.position.y = y; vampire.add(mesh); } };
+  // the cape hangs round his back from the shoulders to the floor
+  layer(new THREE.CylinderGeometry(1.0, 1.42, 1.5, 48, 1, true, Math.PI * 0.4, Math.PI * 1.2), 0.92);
+  // and a tall collar behind his head that rises to two points, red inside
+  const collarGeo = new THREE.CylinderGeometry(1.12, 0.95, 0.62, 64, 6, true, Math.PI * 0.5, Math.PI);
+  { const pos = collarGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i), y = pos.getY(i);
+      const a = Math.atan2(x, z);                                   // 0 = front, ±π = straight behind
+      const side = Math.abs(Math.sin(a));                           // 1 at the sides, 0 at the back
+      const v = (y + 0.31) / 0.62;                                  // 0 at the neck, 1 at the top edge
+      pos.setY(i, -0.31 + v * (0.62 + 0.42 * Math.pow(side, 3) - 0.12 * (1 - side)));   // dips at the back, peaks at the sides
+      const flare = 1 + 0.18 * v * v * side; pos.setX(i, x * flare); pos.setZ(i, z * flare);
+    }
+    collarGeo.computeVertexNormals(); }
+  layer(collarGeo, 1.95);
+  vampire.scale.set(1.04, 1, 0.88); vampire.position.z = -0.06;
+  // the cape's tie round his neck with a gold clasp
+  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.97, 0.035, 8, 64), capeBlack.clone()); tie.material.side = THREE.FrontSide;
+  tie.rotation.x = Math.PI / 2; tie.position.y = 1.68; tie.scale.set(1, 0.95, 1.02); vampire.add(tie);
+  const clasp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 20, 14), new THREE.MeshToonMaterial({ color: 0xf2c230, gradientMap: TOON_BANDS.cel }));
+  clasp.scale.z = 0.5; clasp.position.set(0, 1.66, fz(0, 1.66) / 0.88 + 0.07); vampire.add(clasp);
+  const gem = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), new THREE.MeshToonMaterial({ color: 0xc0182a, gradientMap: TOON_BANDS.cel }));
+  gem.scale.z = 0.6; gem.position.copy(clasp.position); gem.position.z += 0.03; vampire.add(gem);
+  const fangMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel });
+  for (const sx of [-1, 1]) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.08, 10), fangMat);
+    f.rotation.x = Math.PI; f.position.set(sx * 0.05, 1.885, (fz(0, 1.9) + 0.17) / 0.88); vampire.add(f);
+  }
+}
+const batWings = [-1, 1].map(sx => {
+  const sh = new THREE.Shape();
+  // a bat wing: a long top edge out to the tip, then scallops back in along the bottom
+  sh.moveTo(0, 0.12); sh.quadraticCurveTo(0.35, 0.32, 0.72, 0.2);
+  sh.quadraticCurveTo(0.62, 0.05, 0.6, -0.08); sh.quadraticCurveTo(0.5, -0.02, 0.42, -0.12);
+  sh.quadraticCurveTo(0.32, -0.05, 0.22, -0.16); sh.quadraticCurveTo(0.12, -0.08, 0, -0.14); sh.lineTo(0, 0.12);
+  const wing = new THREE.Mesh(new THREE.ShapeGeometry(sh, 16), new THREE.MeshToonMaterial({ color: 0x3b2c4d, gradientMap: TOON_BANDS.cel, side: THREE.DoubleSide }));
+  wing.scale.x = sx;
+  wing.rotation.z = sx * 0.45; wing.scale.multiplyScalar(1.3);
+  const pivot = new THREE.Group(); pivot.position.set(sx * 0.4, 1.02, -0.28); pivot.add(wing); pivot.visible = false;
+  alienBody.add(pivot); return pivot;
+});
+const gregWitch = new THREE.Group(); croc.add(gregWitch); gregWitch.visible = false;
+{
+  const hatMat = new THREE.MeshToonMaterial({ color: 0x2a2238, gradientMap: TOON_BANDS.cel });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.015, 24), hatMat); gregWitch.add(brim);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.24, 20), hatMat); cone.position.y = 0.12; cone.rotation.z = -0.25; gregWitch.add(cone);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.087, 0.087, 0.03, 20), new THREE.MeshToonMaterial({ color: 0xff8a1f, gradientMap: TOON_BANDS.cel })); band.position.y = 0.02; gregWitch.add(band);
+  gregWitch.position.set(0.37, 0.5, 0.02); gregWitch.rotation.z = -0.3; gregWitch.scale.setScalar(1.4);
+}
 const tree = new THREE.Group(); scene.add(tree); tree.position.set(1.4, 0, 1.45);
 const treeLights = [];
 {
@@ -1785,6 +1841,11 @@ function pose(t) {
   const mon = now.getMonth(), day = now.getDate(), hr = now.getHours();
   const halloween = params.has('halloween') || (mon === 9 && day >= 24);
   pumpkin.visible = halloween && !tv.visible;
+  // costumes all Halloween week
+  vampire.visible = halloween;
+  vampire.children.forEach(c => { if (c.geometry.type === 'ConeGeometry') c.visible = !bearYawn.visible; });   // fangs tuck away for a yawn
+  batWings.forEach((w, i) => { w.visible = halloween; w.rotation.y = (i ? -1 : 1) * (0.35 + 0.18 * Math.sin(t * 2.2)); });
+  gregWitch.visible = halloween;
   if (halloween) {
     const lit = params.has('night') || hr >= 18 || hr < 6;
     const flick = lit ? 0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 5.3) : 0;

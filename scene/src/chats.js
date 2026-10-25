@@ -142,6 +142,9 @@ export const CHATS = [
                        ['B', 'Excellent plan.', 'happy', 'giggle']] },
   { when: newYearsDay, lines: [['N', 'Happy New Year!', 'normal', 'giggle'], ['B', 'Same coffee, brand new year.', 'happy', 'happy']] },
 
+  { when: (c) => c.month === 9 && c.date >= 24, lines: [['N', 'What are you meant to be?', 'normal', 'curious'], ['B', 'I vant to drink your… coffee.', 'happy', 'o'],
+                                                       ['N', 'Hahaha! Scary!', 'happy', 'giggle']] },
+  { when: (c) => c.month === 9 && c.date >= 24, lines: [['B', 'Nice wings, Nom.', 'happy', 'normal'], ['N', 'I\'m your bat. Flap flap.', 'normal', 'happy']] },
   { when: (c) => c.month === 9 && c.date >= 24, lines: [['N', 'Barry… the pumpkin is looking at me.', 'normal', 'o'],
                                                         ['B', 'It\'s friendly. Mostly.', 'happy', 'o']] },
 ];
