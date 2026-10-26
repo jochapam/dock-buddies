@@ -151,7 +151,7 @@ function bands(values, smooth) {
 }
 const TOON_BANDS = { toon: bands([95, 175, 255], false), cel: bands([92, 135, 185, 228, 250], true) };
 function plushMaterial(color, occ, useAo = false, vertexColors = false, sheenBase = color) {
-  if (STYLE !== 'plush') return new THREE.MeshToonMaterial({ color, vertexColors, gradientMap: TOON_BANDS[STYLE] });
+  if (STYLE !== 'plush') { const t = new THREE.MeshToonMaterial({ color, vertexColors, gradientMap: TOON_BANDS[STYLE] }); t.userData.plush = true; return t; }
   const id = `${color}|${occ}|${useAo}|${vertexColors}|${sheenBase}`;
   if (plushMaterials.has(id)) return plushMaterials.get(id);
   const m = new THREE.MeshPhysicalMaterial({
@@ -179,6 +179,7 @@ uniform float uOcc; uniform vec3 uRim; varying vec3 vLocal; varying float vAo; $
         #include <opaque_fragment>`);
   };
   m.customProgramCacheKey = () => 'plush' + (useAo ? '-crease' : '') + (vertexColors ? '-vc' : '');
+  m.userData.plush = true;
   plushMaterials.set(id, m);
   return m;
 }
@@ -1184,6 +1185,27 @@ const bandage = toon(0xf0e8d6);
   wear('devil', devilTail([[0.7, 0.3, -0.5], [1.25, 0.25, -0.3], [1.55, 0.55, -0.1], [1.5, 0.95, 0.05]], 0.04), bearBody);
   wear('devil', devilTail([[-0.45, 0.25, -0.25], [-0.85, 0.2, -0.15], [-1.0, 0.5, -0.05], [-0.92, 0.8, 0.0]], 0.03), alienBody);
 }
+// On ghost day Barry and Nom themselves turn pale, in soft shades of ghostly white (Greg stays green).
+const GHOST = { value: 0 };
+let ghostPatched = false;
+function patchGhostly() {
+  const skip = new Set([bearMug, alienMug, croc]);
+  const walk = (o) => { if (skip.has(o)) return;
+    if (o.isMesh) for (const m of [].concat(o.material)) if (m.userData.plush && !m.userData.ghostly) {
+      m.userData.ghostly = true;
+      const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
+      m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
+        sh.uniforms.uGhost = GHOST;
+        sh.fragmentShader = 'uniform float uGhost;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+          { float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.85, 0.98) * (0.6 + 0.45 * gl), uGhost); }`);
+      };
+      m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-ghostly';
+      m.needsUpdate = true;
+    }
+    o.children.forEach(walk); };
+  walk(bearBody); walk(alienBody);
+}
 const tree = new THREE.Group(); scene.add(tree); tree.position.set(1.4, 0, 1.45);
 const treeLights = [];
 {
@@ -2014,6 +2036,8 @@ function pose(t) {
   // a different costume each day of Halloween week
   const costume = costumeToday(now);
   for (const k in COSTUME) COSTUME[k].forEach(o => (o.visible = k === costume));
+  if (costume === 'ghost' && !ghostPatched) { patchGhostly(); ghostPatched = true; }
+  GHOST.value = costume === 'ghost' ? 1 : 0;
   vampire.children.forEach(c => { if (c.geometry.type === 'ConeGeometry') c.visible = !bearYawn.visible; });   // fangs tuck away for a yawn
   batWings.forEach((w, i) => { w.rotation.y = (i ? -1 : 1) * (0.35 + 0.18 * Math.sin(t * 2.2)); });
   if (halloween) {
