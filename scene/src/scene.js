@@ -1096,7 +1096,7 @@ const bandage = toon(0xf0e8d6);
 
   // ---- witches: a witch's hat for Barry, a tiny one perched on Nom's ear, a broom leaning by Nom, and Greg's hat
   const bh = wear('witch', witchHat(0.5, 0.8, 0xff8a1f), bearBody); bh.position.set(-0.06, 2.76, 0.02); bh.rotation.set(0.1, 0, 0.14);
-  const nh = wear('witch', witchHat(0.2, 0.34, 0x8fd14f), alienBody); nh.position.set(-0.41, 2.43, -0.04); nh.rotation.z = 0.3; nh.scale.setScalar(1.5);
+  const nh = wear('witch', witchHat(0.2, 0.34, 0x8fd14f), alienBody); nh.position.set(0.02, 1.52, 0.06); nh.rotation.set(-0.05, 0, 0.12); nh.scale.setScalar(2.0);   // on top of its head, between the ears
   const broom = new THREE.Group(); wear('witch', broom, alien);
   const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.5, 10), toon(0x8a5a33)); stick.position.y = 0.75; broom.add(stick);
   const bristles = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.42, 14, 1, true), toon(0xd9a441, { side: THREE.DoubleSide })); bristles.position.y = 0.18; broom.add(bristles);
@@ -1115,16 +1115,22 @@ const bandage = toon(0xf0e8d6);
 
   // ---- ghosts: a white sheet over each of them, with a face hole so you can still see who's under there
   function sheet(rings, hole, parent) {
-    const SEG = 96, pos = [], idx = [];
+    const SEG = 120, pos = [], idx = [], col = [];
+    const yBot = rings[0][0], yTop = rings[rings.length - 1][0];
     rings.forEach(([y, rx, rz], i) => { for (let j = 0; j <= SEG; j++) { const a = j / SEG * Math.PI * 2;
-      const hem = i === 0 ? 0.05 * Math.sin(a * 7) : 0, flare = i === 0 ? 1.08 : 1;   // a wavy, slightly flared hem
-      pos.push(rx * flare * Math.sin(a), y + hem, rz * flare * Math.cos(a)); } });
+      const low = Math.pow(1 - (y - yBot) / (yTop - yBot), 1.6);         // 1 at the hem, 0 at the top
+      const fold = 1 + 0.07 * low * Math.sin(a * 9 + 0.6) + 0.025 * low * Math.sin(a * 17);   // soft folds, deeper towards the hem
+      const hem = i === 0 ? 0.07 * Math.sin(a * 7) : 0, flare = i === 0 ? 1.14 : (i === 1 ? 1.04 : 1);   // a wavy, flared hem
+      pos.push(rx * flare * fold * Math.sin(a), y + hem, rz * flare * fold * Math.cos(a));
+      // painted-in shading: darker in the folds and round the sides, so the sheet reads as cloth
+      const sh = 1 - 0.22 * low * Math.max(0, -Math.sin(a * 9 + 0.6)) - 0.18 * Math.pow(Math.abs(Math.sin(a)), 3) - 0.1 * (1 - Math.min(1, (y - yBot) / 0.25));
+      col.push(sh, sh, sh * 1.02); } });
     for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < SEG; j++) {
       const a = i * (SEG + 1) + j, b = a + 1, c = a + SEG + 2, d = a + SEG + 1; idx.push(a, b, c, a, c, d);
     }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
     // the face hole is cut per pixel, so its edge is a smooth oval
-    const mat = toon(0xf4f6ff, { side: THREE.DoubleSide });
+    const mat = toon(0xf3f6fd, { side: THREE.DoubleSide, vertexColors: true });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uHole = { value: new THREE.Vector4(...hole) };
       sh.vertexShader = 'varying vec3 vSheet;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSheet = position;');
@@ -1132,16 +1138,23 @@ const bandage = toon(0xf0e8d6);
         '#include <clipping_planes_fragment>\nif (vSheet.z > 0.0 && pow(vSheet.x / uHole.z, 2.0) + pow((vSheet.y - uHole.y) / uHole.w, 2.0) < 1.0) discard;');
     };
     mat.customProgramCacheKey = () => 'sheet' + hole.join(',');
-    return wear('ghost', new THREE.Mesh(g, mat), parent);
+    const m = wear('ghost', new THREE.Mesh(g, mat), parent);
+    // a stitched hem round the face hole, lying on the sheet
+    const surfZ = (x, y) => { let i = 0; while (i < rings.length - 2 && rings[i + 1][0] < y) i++;
+      const [y1, rx1, rz1] = rings[i], [y2, rx2, rz2] = rings[i + 1], u = Math.min(1, Math.max(0, (y - y1) / (y2 - y1)));
+      const rx = rx1 + (rx2 - rx1) * u, rz = rz1 + (rz2 - rz1) * u; return rz * Math.sqrt(Math.max(0, 1 - (x / rx) ** 2)); };
+    const pts = []; for (let k = 0; k < 64; k++) { const f = k / 64 * Math.PI * 2, x = hole[2] * Math.cos(f), y = hole[1] + hole[3] * Math.sin(f); pts.push(new THREE.Vector3(x, y, surfZ(x, y) + 0.005)); }
+    wear('ghost', new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 96, hole[2] * 0.045, 8, true), toon(0xd3d9e6)), parent);
+    return m;
   }
-  { const rings = [];
-    for (let y = 0.12; y <= 2.55; y += 0.12) { const rz = fz(0, y) + 0.1; rings.push([y, rz * 1.22, rz]); }
+  { const rings = [];   // Barry: a hood-length sheet, from his chest up over his ears
+    for (let y = 1.4; y <= 2.55; y += 0.06) { const rz = fz(0, y) + 0.1; rings.push([y, Math.max(rz * 1.22, 0.98 + Math.max(0, y - 1.8) * 0.4), rz]); }
     const [y0, rx0, rz0] = rings[rings.length - 1];
-    for (let k = 1; k <= 8; k++) { const f = k / 8 * Math.PI / 2; rings.push([y0 + 0.62 * Math.sin(f), (rx0 + 0.16) * Math.pow(Math.cos(f), 0.8), (rz0 + 0.04) * Math.cos(f)]); }
+    for (let k = 1; k <= 10; k++) { const f = k / 10 * Math.PI / 2; rings.push([y0 + 0.66 * Math.sin(f), rx0 * Math.pow(Math.cos(f), 0.7), rz0 * Math.pow(Math.cos(f), 0.85)]); }
     sheet(rings, [0, 2.07, 0.6, 0.44], bearBody); }
-  { const prof = [[0.05, 0.6], [0.3, 0.69], [0.6, 0.7], [0.9, 0.68], [1.15, 0.64], [1.35, 0.62], [1.6, 0.72], [1.9, 0.76], [2.15, 0.74], [2.35, 0.64], [2.5, 0.46], [2.6, 0.25], [2.64, 0]];
+  { const prof = [[0.6, 0.7], [0.75, 0.69], [0.9, 0.68], [1.15, 0.64], [1.35, 0.62], [1.6, 0.72], [1.9, 0.76], [2.15, 0.74], [2.35, 0.64], [2.5, 0.46], [2.6, 0.25], [2.64, 0]];
     const rings = prof.map(([y, r]) => [y, r + 0.06, (y < 1.45 ? alienFrontZ(0, y) : 0.34) + 0.06]);
-    sheet(rings, [0, 1.0, 0.58, 0.32], alienBody); }
+    sheet(rings, [0, 1.02, 0.58, 0.3], alienBody); }
   // ---- devils: little red horns and pointy tails
   for (const sx of [-1, 1]) {
     const h = wear('devil', horn(0.075, 0.26), bearBody); h.position.set(sx * 0.3, 2.62, 0.2); h.rotation.set(0.15, 0, -sx * 0.35);
