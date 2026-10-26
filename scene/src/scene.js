@@ -1054,22 +1054,49 @@ function horn(r, h) { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 16),
 const bandage = toon(0xf0e8d6);
 {
   // ---- pirates: a tricorn and an eye patch for Barry; a patch and a gold earring for Nom; a little tricorn for Greg
-  const hat = wear('pirate', tricorn(0.42), bearBody); hat.position.set(-0.06, 2.78, 0.02); hat.rotation.set(0.12, 0, 0.12); hat.scale.setScalar(1.15);
-  const patch = wear('pirate', new THREE.Mesh(new THREE.CircleGeometry(0.12, 32), toon(0x111114)), bearBody);
+  // a proper cartoon pirate hat: a big upturned front with gold trim and a skull and crossbones
+  function pirateHat(w) {
+    const g = new THREE.Group(), black = toon(0x1d1a20), gold = toon(0xf2c230), white = toon(0xffffff);
+    const sh = new THREE.Shape();
+    sh.moveTo(-w * 0.5, 0); sh.quadraticCurveTo(0, -w * 0.07, w * 0.5, 0);
+    sh.quadraticCurveTo(w * 0.6, w * 0.1, w * 0.52, w * 0.2);
+    sh.quadraticCurveTo(w * 0.3, w * 0.18, w * 0.17, w * 0.34);
+    sh.quadraticCurveTo(0, w * 0.46, -w * 0.17, w * 0.34);
+    sh.quadraticCurveTo(-w * 0.3, w * 0.18, -w * 0.52, w * 0.2);
+    sh.quadraticCurveTo(-w * 0.6, w * 0.1, -w * 0.5, 0);
+    const d = w * 0.22;
+    const front = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: true, bevelThickness: w * 0.03, bevelSize: w * 0.025, bevelSegments: 3, curveSegments: 20 }), black);
+    front.position.z = -d; g.add(front);
+    // the crown behind it
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(w * 0.36, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), black);
+    crown.scale.set(1, 0.75, 0.8); crown.position.set(0, 0, -d - w * 0.12); g.add(crown);
+    const trim = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[-0.5, 0.01], [-0.25, -0.03], [0, -0.04], [0.25, -0.03], [0.5, 0.01]].map(([x, y]) => new THREE.Vector3(x * w, y * w + w * 0.06, w * 0.04))), 24, w * 0.022, 8), gold);
+    g.add(trim);
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(w * 0.075, 20, 14), white); skull.scale.set(1, 0.95, 0.45); skull.position.set(0, w * 0.2, w * 0.035); g.add(skull);
+    const jaw = new THREE.Mesh(new RoundedBoxGeometry(w * 0.075, w * 0.05, w * 0.03, 2, w * 0.012), white); jaw.position.set(0, w * 0.135, w * 0.04); g.add(jaw);
+    for (const sx of [-1, 1]) { const eye = new THREE.Mesh(new THREE.CircleGeometry(w * 0.022, 12), black); eye.position.set(sx * w * 0.028, w * 0.2, w * 0.072); g.add(eye); }
+    for (const a of [-0.6, 0.6]) { const bone = new THREE.Mesh(new RoundedBoxGeometry(w * 0.26, w * 0.035, w * 0.02, 2, w * 0.015), white); bone.rotation.z = a; bone.position.set(0, w * 0.17, w * 0.025); g.add(bone); }
+    return g;
+  }
+  // a thin strap lying on a surface, through the given (x, y) points
+  const strapOn = (pts, surf, r, parent) => wear('pirate', new THREE.Mesh(new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3(pts.map(([x, y]) => new THREE.Vector3(x, y, surf(x, y)))), 40, r, 8), toon(0x111114)), parent);
+  const hat = wear('pirate', pirateHat(1.35), bearBody); hat.position.set(0, 2.6, 0.46); hat.rotation.set(-0.12, 0, 0.06);
+  const patch = wear('pirate', new THREE.Mesh(new THREE.CircleGeometry(0.115, 32), toon(0x111114)), bearBody);
   patch.position.set(EYE.x, EYE.y, fz(EYE.x, EYE.y) + 0.065); patch.rotation.y = 0.42;
-  const strap = wear('pirate', new THREE.Mesh(new THREE.TorusGeometry(1, 0.018, 8, 64), toon(0x111114)), bearBody);
-  strap.position.set(0, 2.28, -0.05); strap.rotation.set(Math.PI / 2 - 0.12, 0.38, 0); strap.scale.set(0.98, 0.9, 1);
+  const bearSurf = (x, y) => Math.max(fz(x, y), 0.05) + 0.03;
+  strapOn([[EYE.x - 0.06, EYE.y + 0.09], [0.15, 2.35], [-0.05, 2.5]], bearSurf, 0.016, bearBody);   // up across his forehead, under the hat
+  strapOn([[EYE.x + 0.1, EYE.y + 0.02], [0.62, 2.2], [0.8, 2.22], [0.92, 2.25]], bearSurf, 0.016, bearBody);   // and round the side of his head
   const nomEye = alienEyes[0];   // the one away from Barry
-  const npatch = new THREE.Mesh(new THREE.CircleGeometry(EYE_R * 1.08, 32), toon(0x111114)); npatch.position.z = 0.075; wear('pirate', npatch, nomEye.white.parent);
-  const nstrap = wear('pirate', new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.018, 8, 64), toon(0x111114)), alienBody);
-  nstrap.position.set(0, 1.2, 0.0); nstrap.rotation.set(Math.PI / 2 - 0.15, -0.3, 0); nstrap.scale.set(1, 0.52, 1);
-  const ring = wear('pirate', new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 8, 24), toon(0xf2c230)), alienBody);
-  ring.position.set(-0.58, 1.36, 0.08); ring.rotation.y = 0.3;
+  const npatch = new THREE.Mesh(new THREE.CircleGeometry(EYE_R * 0.92, 32), toon(0x111114)); npatch.position.z = 0.075; wear('pirate', npatch, nomEye.white.parent);
+  const nomSurf = (x, y) => Math.max(alienFrontZ(x, y), 0.05) + 0.035;
+  strapOn([[-0.2, 1.27], [-0.1, 1.38], [0.02, 1.47]], nomSurf, 0.014, alienBody);     // up between its ears
+  strapOn([[-0.47, 1.14], [-0.58, 1.16], [-0.66, 1.18]], nomSurf, 0.014, alienBody);  // and round the side
   const ghat = wear('pirate', tricorn(0.13), croc); ghat.position.set(0.4, 0.55, 0.02); ghat.rotation.set(0, 0, -0.3); ghat.scale.setScalar(1.5);
 
   // ---- witches: a witch's hat for Barry, a tiny one perched on Nom's ear, a broom leaning by Nom, and Greg's hat
-  const bh = wear('witch', witchHat(0.5, 0.8, 0xff8a1f), bearBody); bh.position.set(-0.06, 2.8, 0.02); bh.rotation.set(0.1, 0, 0.14);
-  const nh = wear('witch', witchHat(0.2, 0.34, 0x8fd14f), alienBody); nh.position.set(-0.47, 2.3, -0.04); nh.rotation.z = 0.25; nh.scale.setScalar(1.3);
+  const bh = wear('witch', witchHat(0.5, 0.8, 0xff8a1f), bearBody); bh.position.set(-0.06, 2.76, 0.02); bh.rotation.set(0.1, 0, 0.14);
+  const nh = wear('witch', witchHat(0.2, 0.34, 0x8fd14f), alienBody); nh.position.set(-0.41, 2.43, -0.04); nh.rotation.z = 0.3; nh.scale.setScalar(1.5);
   const broom = new THREE.Group(); wear('witch', broom, alien);
   const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.5, 10), toon(0x8a5a33)); stick.position.y = 0.75; broom.add(stick);
   const bristles = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.42, 14, 1, true), toon(0xd9a441, { side: THREE.DoubleSide })); bristles.position.y = 0.18; broom.add(bristles);
