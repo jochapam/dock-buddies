@@ -1114,14 +1114,17 @@ const bandage = toon(0xf0e8d6);
   const gb = new THREE.Mesh(new THREE.TorusGeometry(1, 0.035, 8, 40), bandage); gb.rotation.set(0, Math.PI / 2, 0.15); gb.scale.set(0.2, 0.21, 1); gb.position.set(-0.05, 0.03, 0); wear('mummy', gb, croc);
 
   // ---- ghosts: a white sheet over each of them, with a face hole so you can still see who's under there
-  function sheet(rings, hole, parent, open = 0) {   // open: half-angle of a gap left at the front (0 = all the way round)
+  function sheet(rings, hole, parent, open = 0, bump = null, sq = 2) {   // sq > 2 gives a squarer cross-section   // bump: {fx, w} lobes pushed forward over the feet (amount per ring in rings[i][3])   // open: half-angle of a gap left at the front (0 = all the way round)
     const SEG = 120, pos = [], idx = [], col = [];
     const yBot = rings[0][0], yTop = rings[rings.length - 1][0];
-    rings.forEach(([y, rx, rz], i) => { for (let j = 0; j <= SEG; j++) { const a = open + j / SEG * (Math.PI * 2 - 2 * open);
+    rings.forEach(([y, rx, rz, amt], i) => { for (let j = 0; j <= SEG; j++) { const a = open + j / SEG * (Math.PI * 2 - 2 * open);
       const low = Math.pow(1 - (y - yBot) / (yTop - yBot), 1.6);         // 1 at the hem, 0 at the top
       const fold = 1 + (open ? 0.1 : 0.07) * low * Math.sin(a * 9 + 0.6) + 0.03 * low * Math.sin(a * 17) + (open ? 0.18 * low * low : 0);   // folds; the drape belling out at the floor   // soft folds, deeper towards the hem
       const hem = i === 0 ? 0.07 * Math.sin(a * 7) : 0, flare = i === 0 ? 1.14 : (i === 1 ? 1.04 : 1);   // a wavy, flared hem
-      pos.push(rx * flare * fold * Math.sin(a), y + hem, rz * flare * fold * Math.cos(a));
+      const se = (v) => Math.sign(v) * Math.pow(Math.abs(v), 2 / sq);
+      const px = rx * flare * fold * se(Math.sin(a)); let pz = rz * flare * fold * se(Math.cos(a));
+      if (bump && amt && pz > 0) pz += amt * Math.cos(a) * (Math.exp(-(((px - bump.fx) / bump.w) ** 2)) + Math.exp(-(((px + bump.fx) / bump.w) ** 2)));
+      pos.push(px, y + hem, pz);
       // painted-in shading: darker in the folds and round the sides, so the sheet reads as cloth
       const edge = open ? Math.max(0, 1 - Math.min(Math.abs(a - open), Math.abs(Math.PI * 2 - open - a)) / 0.35) : 0;   // shade into the front opening
       const sh = 1 - 0.3 * low * Math.max(0, -Math.sin(a * 9 + 0.6)) - 0.26 * Math.pow(Math.abs(Math.sin(a)), 3)
@@ -1156,21 +1159,23 @@ const bandage = toon(0xf0e8d6);
     const [y0, rx0, rz0] = rings[rings.length - 1];
     for (let k = 1; k <= 10; k++) { const f = k / 10 * Math.PI / 2; rings.push([y0 + 0.8 * Math.sin(f), rx0 * Math.cos(f), rz0 * Math.cos(f)]); }
     sheet(rings, [0, 2.07, 0.6, 0.44], bearBody);
-    // and the rest of the sheet drapes down his sides and back to the floor, open at the front for his arms and mug
-    const drape = []; for (let y = 0.04; y <= 1.62; y += 0.08) { const rz = fz(0, y) + 0.12; drape.push([y, rz * 1.22 + 0.22 * Math.sin(Math.min(1, y / 1.2) * Math.PI * 0.75), rz]); }
-    sheet(drape, [0, -9, 0.1, 0.1], bearBody, 0.62);
-    // below his mug it closes across the front and flares out over his legs to the floor
-    const skirt = []; const top = 0.8, rzT = fz(0, top) + 0.14, rxT = rzT * 1.22 + 0.22;
-    for (let y = 0.03; y <= top + 0.001; y += 0.0775) { const u = Math.pow(y / top, 0.7); skirt.push([y, 1.5 + (rxT - 1.5) * u, 1.55 + (rzT - 1.55) * u]); }
-    sheet(skirt, [0, -9, 0.1, 0.1], bearBody); }
+    // and the rest of the sheet hangs all the way round him to the floor, over his tummy and tucked over his feet
+    const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const body = []; for (let y = 0.03; y <= 1.62; y += 0.06) {
+      const rz = fz(0, y) + 0.1, rx = rz * 1.22 + 0.22 * Math.sin(Math.min(1, y / 1.2) * Math.PI * 0.75) + 0.18 * (1 - ss(0.5, 0.85, y));
+      const atFoot = rz * Math.sqrt(Math.max(0, 1 - (0.58 / rx) ** 2));
+      body.push([y, rx, rz, Math.max(0, 1.52 - atFoot) * (1 - ss(0.62, 0.85, y))]); }
+    sheet(body, [0, -9, 0.1, 0.1], bearBody, 0, { fx: 0.6, w: 0.46 }); }
   { const prof = [[0.6, 0.7], [0.75, 0.69], [0.9, 0.68], [1.15, 0.64], [1.35, 0.62], [1.6, 0.72], [1.9, 0.76], [2.15, 0.74], [2.35, 0.64], [2.5, 0.46], [2.6, 0.25], [2.64, 0]];
     const rings = prof.map(([y, r]) => [y, r + 0.06, (y < 1.45 ? alienFrontZ(0, y) : 0.34) + 0.06]);
     sheet(rings, [0, 1.02, 0.58, 0.3], alienBody);
-    const drape = []; for (let y = 0.03; y <= 0.82; y += 0.06) { const r = y < 0.3 ? 0.6 + y * 0.3 : 0.7; drape.push([y, r + 0.2, alienFrontZ(0, y) + 0.07]); }
-    sheet(drape, [0, -9, 0.1, 0.1], alienBody, 0.75);
-    const skirt = []; const top = 0.24, rzT = alienFrontZ(0, top) + 0.1;
-    for (let y = 0.02; y <= top + 0.001; y += 0.055) { const u = Math.pow(y / top, 0.7); skirt.push([y, 0.98 + (0.88 - 0.98) * u, 0.86 + (rzT - 0.86) * u]); }
-    sheet(skirt, [0, -9, 0.1, 0.1], alienBody); }
+    // below the hood it hangs all the way round to the floor, tucked over its feet
+    const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const body = []; for (let y = 0.02; y <= 0.7; y += 0.04) {
+      const rz = alienFrontZ(0, y) + 0.1, rx = (y < 0.3 ? 0.6 + y * 0.3 : 0.7) + 0.14 + 0.12 * (1 - ss(0.42, 0.6, y));
+      const atFoot = rz * Math.sqrt(Math.max(0, 1 - (0.35 / rx) ** 2));
+      body.push([y, rx, rz, Math.max(0, 0.74 - atFoot) * (1 - ss(0.4, 0.56, y))]); }
+    sheet(body, [0, -9, 0.1, 0.1], alienBody, 0, { fx: 0.36, w: 0.26 }, 3); }
   // ---- devils: little red horns and pointy tails
   for (const sx of [-1, 1]) {
     const h = wear('devil', horn(0.075, 0.26), bearBody); h.position.set(sx * 0.3, 2.62, 0.2); h.rotation.set(0.15, 0, -sx * 0.35);
