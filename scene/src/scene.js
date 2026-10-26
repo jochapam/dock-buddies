@@ -1,7 +1,7 @@
 // Dock Buddies 3D — plush bear and bunny, measured from the reference renders, with tufted shell fur.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { CHATS, SURPRISES } from './chats.js';
+import { CHATS, SURPRISES, BOOS } from './chats.js';
 import * as S from './sculpt.js';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 
@@ -1483,7 +1483,13 @@ const MUG_MOVE = 1.6;
 function giftsOpened() { try { return localStorage.getItem('dbGifts') === String(today().getFullYear()) || D.giftHat; } catch { return !!D.giftHat; } }
 function markGiftsOpened() { try { localStorage.setItem('dbGifts', String(today().getFullYear())); } catch {} }
 const CHAT_TIMES = sipSchedule(97531, 420, 720, 1080);   // a chat every 12-18 minutes (the first after ~7 min)
-const SURPRISE_TIMES = sipSchedule(24601, 1500, 2400, 5400);   // a hiccup, sneeze or lost Greg every 40-90 minutes
+const SURPRISE_TIMES = sipSchedule(24601, 1500, 2400, 5400);
+/** -1..1 sway for whoever is doing a ghost noise right now (0 otherwise). */
+function booSway(W, who, t) {
+  const c = W.chat; if (!c || c.fx !== 'boo' || c.who !== who || !/o{3,}|BOO|Mwa|Whoo/i.test(c.text)) return 0;
+  return Math.sin(t * 4.2) * smooth(Math.min(c.lineT / 0.4, (c.len - c.lineT) / 0.4));
+}
+const BOO_TIMES = sipSchedule(31337, 90, 180, 360);   // ghost day: a spooky noise every 3-6 minutes   // a hiccup, sneeze or lost Greg every 40-90 minutes
 /** how long a line stays up: long enough to read it */
 const lineLength = (ln) => ln[1] ? 1.6 + 0.065 * ln[1].length : 1.6;
 /** a chat that fits the moment, not one heard recently (time-of-day ones get first go) */
@@ -1686,6 +1692,9 @@ function direct(t) {
   if (D.surpriseDueAt != null && t - D.surpriseDueAt < 300 && freeToChat && !D.chat) {
     D.chat = { conv: SURPRISES[Math.floor(Math.random() * SURPRISES.length)], start: t }; D.surpriseDueAt = null;
   }
+  if (!params.has('preview') && !params.has('rest') && costumeToday(today()) === 'ghost' && lastStart(t, BOO_TIMES).since < 0.1) D.booDueAt = t;
+  if (D.booDueAt != null && t - D.booDueAt < 120 && freeToChat && !D.chat) { D.chat = { conv: BOOS[Math.floor(Math.random() * BOOS.length)], start: t }; D.booDueAt = null; }
+  if (params.has('boo')) D.chat = { conv: BOOS[+params.get('boo')], start: t - +(params.get('ct') || 0) };
   if (params.has('surprise')) D.chat = { conv: SURPRISES[+params.get('surprise')], start: t - +(params.get('ct') || 0) };
   if ((D.chatNow || (D.chatDueAt != null && t - D.chatDueAt < 120)) && freeToChat && !D.chat) {
     D.chat = { conv: pickChat(), start: t }; D.chatNow = false; D.chatDueAt = null;
@@ -1834,6 +1843,7 @@ function pose(t) {
   bearBody.rotation.x = 0.07 * zz - 0.09 * W.stretch + BEAR_BEND * Math.sin(Math.PI * bearDown) ;   // nods asleep, leans back to stretch, bends to reach the floor
   bearBody.rotation.x += 0.05 * beat;   // head-bopping to the music
   bearBody.rotation.z = 0.045 * sway - 0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
+  bearBody.rotation.z += 0.07 * booSway(W, 'B', t);   // swaying like a ghost while he moans
   if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn + 0.3 * W.watching;    // turns towards Nom for a toast, or to the TV
   pivotAbout(bearBody, BEAR_BEND_AT);
   bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
@@ -2102,6 +2112,7 @@ function pose(t) {
   tilt -= 0.07 * W.toastTurn + 0.12 * W.pourBarry;            // leans in for a toast, or to pour for Barry
   if (W.waveN > 0) tilt += 0.05 * Math.sin(W.waveT * 12.5) * W.waveN;   // wiggles as it waves
   alienBody.rotation.z = tilt * (1 - nz) - 0.17 * nz;   // asleep: leans over onto Barry
+  { const k = booSway(W, 'N', t); alienBody.rotation.z += 0.09 * k; alien.position.y += 0.05 * Math.abs(k); }   // floaty ghost wobble
   if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn + 0.35 * W.watching;
   const nomTall = 1 + 0.06 * W.nomYawn;
   const nSquash = 1 - 0.09 * Math.sin(Math.PI * W.nMug);

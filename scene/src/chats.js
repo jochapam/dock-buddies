@@ -171,3 +171,15 @@ export const SURPRISES = [
   { fx: 'search', then: 'croc', lines: [['N', 'Where\'s Greg?!', 'normal', 'curious'], ['B', 'Behind you.', 'happy', 'curious'],
                                        ['N', 'GREG!', 'happy', 'giggle']] },
 ];
+
+// Ghost day: every few minutes one of them does a spooky ghost noise (fx 'boo' sways them about while they do)
+export const BOOS = [
+  { fx: 'boo', lines: [['B', 'Boooooo…', 'normal', 'o'], ['N', 'Eek!', 'normal', 'o'], ['N', 'Boo to you too!', 'happy', 'giggle']] },
+  { fx: 'boo', lines: [['N', 'Ooooooooh…', 'normal', 'o'], ['B', 'Very spooky, Nom.', 'happy', 'giggle']] },
+  { fx: 'boo', lines: [['B', 'Wooooooo…', 'normal', 'normal'], ['N', 'Woooooooo!', 'happy', 'o']] },
+  { fx: 'boo', lines: [['N', 'BOO!', 'normal', 'o'], ['B', 'Ahh! My coffee!', 'wonder', 'giggle']] },
+  { fx: 'boo', lines: [['B', 'Booo… who wants coffeeee…', 'normal', 'normal'], ['N', 'Meeeeeee…', 'normal', 'happy']] },
+  { fx: 'boo', lines: [['N', 'Ooooo… I am the ghost of Nom…', 'normal', 'o'], ['B', 'Spoooky.', 'happy', 'giggle']] },
+  { fx: 'boo', lines: [['B', 'Mwahahaha…', 'happy', 'o'], ['N', 'Wrong costume, Barry.', 'normal', 'curious'], ['B', 'Oh. Boooooo…', 'sleepy', 'giggle']] },
+  { fx: 'boo', lines: [['N', 'Whoooo…', 'normal', 'o'], ['B', 'Who?', 'wonder', 'normal'], ['N', 'Whooooo knows!', 'happy', 'giggle']] },
+];
