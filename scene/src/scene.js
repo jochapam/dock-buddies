@@ -1014,6 +1014,115 @@ const gregWitch = new THREE.Group(); croc.add(gregWitch); gregWitch.visible = fa
   const band = new THREE.Mesh(new THREE.CylinderGeometry(0.087, 0.087, 0.03, 20), new THREE.MeshToonMaterial({ color: 0xff8a1f, gradientMap: TOON_BANDS.cel })); band.position.y = 0.02; gregWitch.add(band);
   gregWitch.position.set(0.37, 0.5, 0.02); gregWitch.rotation.z = -0.3; gregWitch.scale.setScalar(1.4);
 }
+// …and a different costume each day of Halloween week (vampires on the night itself)
+const toon = (color, extra) => new THREE.MeshToonMaterial(Object.assign({ color, gradientMap: TOON_BANDS.cel }, extra || {}));
+const COSTUME_DAYS = ['vampire', 'pirate', 'vampire', 'witch', 'mummy', 'ghost', 'devil', 'vampire'];   // 24-31 Oct
+function costumeToday(n) {
+  if (params.has('costume')) return params.get('costume');
+  if (params.has('halloween')) return 'vampire';
+  return n.getMonth() === 9 && n.getDate() >= 24 ? COSTUME_DAYS[n.getDate() - 24] : null;
+}
+const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [] };
+const wear = (name, obj, parent) => { parent.add(obj); obj.visible = false; COSTUME[name].push(obj); return obj; };
+function witchHat(r, h, band) {
+  const g = new THREE.Group(), hatMat = toon(0x2e2140);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(r, r, r * 0.08, 32), hatMat); g.add(brim);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(r * 0.55, h, 32), hatMat); cone.position.set(-h * 0.06, h * 0.5, 0); cone.rotation.z = 0.18; g.add(cone);
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.555, r * 0.56, r * 0.18, 32), toon(band)); b.position.y = r * 0.1; g.add(b);
+  return g;
+}
+function tricorn(r) {
+  const g = new THREE.Group(), black = toon(0x1d1a20);
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.72, r * 0.5, 32), black); crown.position.y = r * 0.25; g.add(crown);
+  const turn = new THREE.Group(); turn.rotation.y = -Math.PI / 2; g.add(turn);    // a corner pointing forward
+  const brim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.82, r * 0.16, 10, 3), black); brim.rotation.x = Math.PI / 2; brim.position.y = r * 0.12; turn.add(brim);
+  const trim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.82, r * 0.05, 8, 3), toon(0xf2c230)); trim.rotation.x = Math.PI / 2; trim.position.y = r * 0.28; turn.add(trim);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.13, 16, 12), toon(0xffffff)); skull.scale.z = 0.5; skull.position.set(0, r * 0.3, r * 0.68); g.add(skull);
+  for (const a of [-0.7, 0.7]) { const bone = new THREE.Mesh(new THREE.BoxGeometry(r * 0.38, r * 0.05, r * 0.03), toon(0xffffff)); bone.rotation.z = a; bone.position.set(0, r * 0.14, r * 0.7); g.add(bone); }
+  return g;
+}
+function devilTail(pts, w) {
+  const g = new THREE.Group(), red = toon(0xc8202c);
+  const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p)));
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 32, w, 10), red));
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(w * 3, w * 5, 4), red); tip.scale.z = 0.35;
+  const end = curve.getPoint(1), dir = curve.getTangent(1);
+  tip.position.copy(end).addScaledVector(dir, w * 2); tip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); g.add(tip);
+  return g;
+}
+function horn(r, h) { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 16), toon(0xc8202c)); m.geometry.translate(0, h / 2, 0); return m; }
+const bandage = toon(0xf0e8d6);
+{
+  // ---- pirates: a tricorn and an eye patch for Barry; a patch and a gold earring for Nom; a little tricorn for Greg
+  const hat = wear('pirate', tricorn(0.42), bearBody); hat.position.set(-0.06, 2.78, 0.02); hat.rotation.set(0.12, 0, 0.12); hat.scale.setScalar(1.15);
+  const patch = wear('pirate', new THREE.Mesh(new THREE.CircleGeometry(0.12, 32), toon(0x111114)), bearBody);
+  patch.position.set(EYE.x, EYE.y, fz(EYE.x, EYE.y) + 0.065); patch.rotation.y = 0.42;
+  const strap = wear('pirate', new THREE.Mesh(new THREE.TorusGeometry(1, 0.018, 8, 64), toon(0x111114)), bearBody);
+  strap.position.set(0, 2.28, -0.05); strap.rotation.set(Math.PI / 2 - 0.12, 0.38, 0); strap.scale.set(0.98, 0.9, 1);
+  const nomEye = alienEyes[0];   // the one away from Barry
+  const npatch = new THREE.Mesh(new THREE.CircleGeometry(EYE_R * 1.08, 32), toon(0x111114)); npatch.position.z = 0.075; wear('pirate', npatch, nomEye.white.parent);
+  const nstrap = wear('pirate', new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.018, 8, 64), toon(0x111114)), alienBody);
+  nstrap.position.set(0, 1.2, 0.0); nstrap.rotation.set(Math.PI / 2 - 0.15, -0.3, 0); nstrap.scale.set(1, 0.52, 1);
+  const ring = wear('pirate', new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 8, 24), toon(0xf2c230)), alienBody);
+  ring.position.set(-0.58, 1.36, 0.08); ring.rotation.y = 0.3;
+  const ghat = wear('pirate', tricorn(0.13), croc); ghat.position.set(0.4, 0.55, 0.02); ghat.rotation.set(0, 0, -0.3); ghat.scale.setScalar(1.5);
+
+  // ---- witches: a witch's hat for Barry, a tiny one perched on Nom's ear, a broom leaning by Nom, and Greg's hat
+  const bh = wear('witch', witchHat(0.5, 0.8, 0xff8a1f), bearBody); bh.position.set(-0.06, 2.8, 0.02); bh.rotation.set(0.1, 0, 0.14);
+  const nh = wear('witch', witchHat(0.2, 0.34, 0x8fd14f), alienBody); nh.position.set(-0.47, 2.3, -0.04); nh.rotation.z = 0.25; nh.scale.setScalar(1.3);
+  const broom = new THREE.Group(); wear('witch', broom, alien);
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.5, 10), toon(0x8a5a33)); stick.position.y = 0.75; broom.add(stick);
+  const bristles = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.42, 14, 1, true), toon(0xd9a441, { side: THREE.DoubleSide })); bristles.position.y = 0.18; broom.add(bristles);
+  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.02, 8, 20), toon(0x7a3fb0)); tie.rotation.x = Math.PI / 2; tie.position.y = 0.38; broom.add(tie);
+  broom.position.set(-0.86, 0, -0.15); broom.rotation.set(0, 0, -0.22);
+  const gw = gregWitch.clone(); wear('witch', gw, croc);
+
+  // ---- mummies: bandages wrapped round them both (and Greg)
+  const wrapB = (y, tilt, w) => { const rz = fz(0, y) + 0.01; const m = new THREE.Mesh(new THREE.TorusGeometry(1, w, 8, 64), bandage);
+    m.rotation.set(Math.PI / 2, tilt, 0); m.scale.set(rz * 1.22, rz, 1); m.position.set(0, y, 0); wear('mummy', m, bearBody); };
+  [[0.55, 0.06], [0.95, -0.05], [1.5, 0.07], [1.75, -0.06], [2.38, 0.1]].forEach(([y, tl]) => wrapB(y, tl, 0.05));
+  const prof = [[0.3, 0.69], [0.58, 0.7], [1.38, 0.5], [1.48, 0.42]];
+  for (const [y, r] of prof) { const rz = alienFrontZ(0, y) + 0.005; const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.04, 8, 64), bandage);
+    m.rotation.set(Math.PI / 2, (y * 7 % 2 - 1) * 0.08, 0); m.scale.set(r + 0.01, rz, 1); m.position.y = y; wear('mummy', m, alienBody); }
+  const gb = new THREE.Mesh(new THREE.TorusGeometry(1, 0.035, 8, 40), bandage); gb.rotation.set(0, Math.PI / 2, 0.15); gb.scale.set(0.2, 0.21, 1); gb.position.set(-0.05, 0.03, 0); wear('mummy', gb, croc);
+
+  // ---- ghosts: a white sheet over each of them, with a face hole so you can still see who's under there
+  function sheet(rings, hole, parent) {
+    const SEG = 96, pos = [], idx = [];
+    rings.forEach(([y, rx, rz], i) => { for (let j = 0; j <= SEG; j++) { const a = j / SEG * Math.PI * 2;
+      const hem = i === 0 ? 0.05 * Math.sin(a * 7) : 0, flare = i === 0 ? 1.08 : 1;   // a wavy, slightly flared hem
+      pos.push(rx * flare * Math.sin(a), y + hem, rz * flare * Math.cos(a)); } });
+    for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < SEG; j++) {
+      const a = i * (SEG + 1) + j, b = a + 1, c = a + SEG + 2, d = a + SEG + 1; idx.push(a, b, c, a, c, d);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    // the face hole is cut per pixel, so its edge is a smooth oval
+    const mat = toon(0xf4f6ff, { side: THREE.DoubleSide });
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uHole = { value: new THREE.Vector4(...hole) };
+      sh.vertexShader = 'varying vec3 vSheet;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSheet = position;');
+      sh.fragmentShader = 'uniform vec4 uHole; varying vec3 vSheet;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+        '#include <clipping_planes_fragment>\nif (vSheet.z > 0.0 && pow(vSheet.x / uHole.z, 2.0) + pow((vSheet.y - uHole.y) / uHole.w, 2.0) < 1.0) discard;');
+    };
+    mat.customProgramCacheKey = () => 'sheet' + hole.join(',');
+    return wear('ghost', new THREE.Mesh(g, mat), parent);
+  }
+  { const rings = [];
+    for (let y = 0.12; y <= 2.55; y += 0.12) { const rz = fz(0, y) + 0.1; rings.push([y, rz * 1.22, rz]); }
+    const [y0, rx0, rz0] = rings[rings.length - 1];
+    for (let k = 1; k <= 8; k++) { const f = k / 8 * Math.PI / 2; rings.push([y0 + 0.62 * Math.sin(f), (rx0 + 0.16) * Math.pow(Math.cos(f), 0.8), (rz0 + 0.04) * Math.cos(f)]); }
+    sheet(rings, [0, 2.07, 0.6, 0.44], bearBody); }
+  { const prof = [[0.05, 0.6], [0.3, 0.69], [0.6, 0.7], [0.9, 0.68], [1.15, 0.64], [1.35, 0.62], [1.6, 0.72], [1.9, 0.76], [2.15, 0.74], [2.35, 0.64], [2.5, 0.46], [2.6, 0.25], [2.64, 0]];
+    const rings = prof.map(([y, r]) => [y, r + 0.06, (y < 1.45 ? alienFrontZ(0, y) : 0.34) + 0.06]);
+    sheet(rings, [0, 1.0, 0.58, 0.32], alienBody); }
+  // ---- devils: little red horns and pointy tails
+  for (const sx of [-1, 1]) {
+    const h = wear('devil', horn(0.075, 0.26), bearBody); h.position.set(sx * 0.3, 2.62, 0.2); h.rotation.set(0.15, 0, -sx * 0.35);
+    const nh2 = wear('devil', horn(0.045, 0.15), alienBody); nh2.position.set(sx * 0.11, 1.4, alienFrontZ(0.11, 1.4) - 0.05); nh2.rotation.set(0.4, 0, -sx * 0.3);
+  }
+  wear('devil', devilTail([[0.7, 0.3, -0.5], [1.25, 0.25, -0.3], [1.55, 0.55, -0.1], [1.5, 0.95, 0.05]], 0.04), bearBody);
+  wear('devil', devilTail([[-0.45, 0.25, -0.25], [-0.85, 0.2, -0.15], [-1.0, 0.5, -0.05], [-0.92, 0.8, 0.0]], 0.03), alienBody);
+}
 const tree = new THREE.Group(); scene.add(tree); tree.position.set(1.4, 0, 1.45);
 const treeLights = [];
 {
@@ -1297,7 +1406,7 @@ const lineLength = (ln) => ln[1] ? 1.6 + 0.065 * ln[1].length : 1.6;
 /** a chat that fits the moment, not one heard recently (time-of-day ones get first go) */
 function pickChat() {
   const n = today();
-  const c = { hour: n.getHours(), day: n.getDay(), month: n.getMonth(), date: n.getDate(), rain: isRainy(), hot: isHot(), cold: isCold(),
+  const c = { hour: n.getHours(), day: n.getDay(), month: n.getMonth(), date: n.getDate(), rain: isRainy(), hot: isHot(), cold: isCold(), costume: costumeToday(n),
               activeMin: D.activeSince == null ? 0 : (performance.now() - D.activeSince) / 60000 };
   D.heard = D.heard || [];
   const fits = CHATS.filter(x => !x.when || x.when(c));
@@ -1841,11 +1950,11 @@ function pose(t) {
   const mon = now.getMonth(), day = now.getDate(), hr = now.getHours();
   const halloween = params.has('halloween') || (mon === 9 && day >= 24);
   pumpkin.visible = halloween && !tv.visible;
-  // costumes all Halloween week
-  vampire.visible = halloween;
+  // a different costume each day of Halloween week
+  const costume = costumeToday(now);
+  for (const k in COSTUME) COSTUME[k].forEach(o => (o.visible = k === costume));
   vampire.children.forEach(c => { if (c.geometry.type === 'ConeGeometry') c.visible = !bearYawn.visible; });   // fangs tuck away for a yawn
-  batWings.forEach((w, i) => { w.visible = halloween; w.rotation.y = (i ? -1 : 1) * (0.35 + 0.18 * Math.sin(t * 2.2)); });
-  gregWitch.visible = halloween;
+  batWings.forEach((w, i) => { w.rotation.y = (i ? -1 : 1) * (0.35 + 0.18 * Math.sin(t * 2.2)); });
   if (halloween) {
     const lit = params.has('night') || hr >= 18 || hr < 6;
     const flick = lit ? 0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 5.3) : 0;
