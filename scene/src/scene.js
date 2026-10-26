@@ -1158,12 +1158,19 @@ const bandage = toon(0xf0e8d6);
     sheet(rings, [0, 2.07, 0.6, 0.44], bearBody);
     // and the rest of the sheet drapes down his sides and back to the floor, open at the front for his arms and mug
     const drape = []; for (let y = 0.04; y <= 1.62; y += 0.08) { const rz = fz(0, y) + 0.12; drape.push([y, rz * 1.22 + 0.22 * Math.sin(Math.min(1, y / 1.2) * Math.PI * 0.75), rz]); }
-    sheet(drape, [0, -9, 0.1, 0.1], bearBody, 0.62); }
+    sheet(drape, [0, -9, 0.1, 0.1], bearBody, 0.62);
+    // below his mug it closes across the front and flares out over his legs to the floor
+    const skirt = []; const top = 0.8, rzT = fz(0, top) + 0.14, rxT = rzT * 1.22 + 0.22;
+    for (let y = 0.03; y <= top + 0.001; y += 0.0775) { const u = Math.pow(y / top, 0.7); skirt.push([y, 1.5 + (rxT - 1.5) * u, 1.55 + (rzT - 1.55) * u]); }
+    sheet(skirt, [0, -9, 0.1, 0.1], bearBody); }
   { const prof = [[0.6, 0.7], [0.75, 0.69], [0.9, 0.68], [1.15, 0.64], [1.35, 0.62], [1.6, 0.72], [1.9, 0.76], [2.15, 0.74], [2.35, 0.64], [2.5, 0.46], [2.6, 0.25], [2.64, 0]];
     const rings = prof.map(([y, r]) => [y, r + 0.06, (y < 1.45 ? alienFrontZ(0, y) : 0.34) + 0.06]);
     sheet(rings, [0, 1.02, 0.58, 0.3], alienBody);
     const drape = []; for (let y = 0.03; y <= 0.82; y += 0.06) { const r = y < 0.3 ? 0.6 + y * 0.3 : 0.7; drape.push([y, r + 0.2, alienFrontZ(0, y) + 0.07]); }
-    sheet(drape, [0, -9, 0.1, 0.1], alienBody, 0.75); }
+    sheet(drape, [0, -9, 0.1, 0.1], alienBody, 0.75);
+    const skirt = []; const top = 0.24, rzT = alienFrontZ(0, top) + 0.1;
+    for (let y = 0.02; y <= top + 0.001; y += 0.055) { const u = Math.pow(y / top, 0.7); skirt.push([y, 0.98 + (0.88 - 0.98) * u, 0.86 + (rzT - 0.86) * u]); }
+    sheet(skirt, [0, -9, 0.1, 0.1], alienBody); }
   // ---- devils: little red horns and pointy tails
   for (const sx of [-1, 1]) {
     const h = wear('devil', horn(0.075, 0.26), bearBody); h.position.set(sx * 0.3, 2.62, 0.2); h.rotation.set(0.15, 0, -sx * 0.35);
