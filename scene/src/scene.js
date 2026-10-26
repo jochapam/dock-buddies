@@ -1114,28 +1114,32 @@ const bandage = toon(0xf0e8d6);
   const gb = new THREE.Mesh(new THREE.TorusGeometry(1, 0.035, 8, 40), bandage); gb.rotation.set(0, Math.PI / 2, 0.15); gb.scale.set(0.2, 0.21, 1); gb.position.set(-0.05, 0.03, 0); wear('mummy', gb, croc);
 
   // ---- ghosts: a white sheet over each of them, with a face hole so you can still see who's under there
-  function sheet(rings, hole, parent) {
+  function sheet(rings, hole, parent, open = 0) {   // open: half-angle of a gap left at the front (0 = all the way round)
     const SEG = 120, pos = [], idx = [], col = [];
     const yBot = rings[0][0], yTop = rings[rings.length - 1][0];
-    rings.forEach(([y, rx, rz], i) => { for (let j = 0; j <= SEG; j++) { const a = j / SEG * Math.PI * 2;
+    rings.forEach(([y, rx, rz], i) => { for (let j = 0; j <= SEG; j++) { const a = open + j / SEG * (Math.PI * 2 - 2 * open);
       const low = Math.pow(1 - (y - yBot) / (yTop - yBot), 1.6);         // 1 at the hem, 0 at the top
-      const fold = 1 + 0.07 * low * Math.sin(a * 9 + 0.6) + 0.025 * low * Math.sin(a * 17);   // soft folds, deeper towards the hem
+      const fold = 1 + (open ? 0.1 : 0.07) * low * Math.sin(a * 9 + 0.6) + 0.03 * low * Math.sin(a * 17) + (open ? 0.18 * low * low : 0);   // folds; the drape belling out at the floor   // soft folds, deeper towards the hem
       const hem = i === 0 ? 0.07 * Math.sin(a * 7) : 0, flare = i === 0 ? 1.14 : (i === 1 ? 1.04 : 1);   // a wavy, flared hem
       pos.push(rx * flare * fold * Math.sin(a), y + hem, rz * flare * fold * Math.cos(a));
       // painted-in shading: darker in the folds and round the sides, so the sheet reads as cloth
-      const sh = 1 - 0.22 * low * Math.max(0, -Math.sin(a * 9 + 0.6)) - 0.18 * Math.pow(Math.abs(Math.sin(a)), 3) - 0.1 * (1 - Math.min(1, (y - yBot) / 0.25));
-      col.push(sh, sh, sh * 1.02); } });
+      const edge = open ? Math.max(0, 1 - Math.min(Math.abs(a - open), Math.abs(Math.PI * 2 - open - a)) / 0.35) : 0;   // shade into the front opening
+      const sh = 1 - 0.3 * low * Math.max(0, -Math.sin(a * 9 + 0.6)) - 0.26 * Math.pow(Math.abs(Math.sin(a)), 3)
+                   - 0.22 * (1 - Math.min(1, (y - yBot) / 0.2)) - 0.22 * edge;
+      col.push(sh * 0.9, sh * 0.93, sh); } });
     for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < SEG; j++) {
       const a = i * (SEG + 1) + j, b = a + 1, c = a + SEG + 2, d = a + SEG + 1; idx.push(a, b, c, a, c, d);
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
     // the face hole is cut per pixel, so its edge is a smooth oval
-    const mat = toon(0xf3f6fd, { side: THREE.DoubleSide, vertexColors: true });
+    const mat = toon(0xcdd2de, { side: THREE.DoubleSide, vertexColors: true });   // lit, this comes out near white; darker keeps the shading from clipping
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uHole = { value: new THREE.Vector4(...hole) };
       sh.vertexShader = 'varying vec3 vSheet;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSheet = position;');
       sh.fragmentShader = 'uniform vec4 uHole; varying vec3 vSheet;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>',
-        '#include <clipping_planes_fragment>\nif (vSheet.z > 0.0 && pow(vSheet.x / uHole.z, 2.0) + pow((vSheet.y - uHole.y) / uHole.w, 2.0) < 1.0) discard;');
+        '#include <clipping_planes_fragment>\nif (vSheet.z > 0.0 && pow(vSheet.x / uHole.z, 2.0) + pow((vSheet.y - uHole.y) / uHole.w, 2.0) < 1.0) discard;')
+        // soft shading towards the outline, so the white sheet keeps its shape against a light background
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\ndiffuseColor.rgb *= mix(0.66, 1.0, smoothstep(0.05, 0.75, abs(normal.z)));');
     };
     mat.customProgramCacheKey = () => 'sheet' + hole.join(',');
     const m = wear('ghost', new THREE.Mesh(g, mat), parent);
@@ -1150,11 +1154,16 @@ const bandage = toon(0xf0e8d6);
   { const rings = [];   // Barry: a hood-length sheet, from his chest up over his ears
     for (let y = 1.4; y <= 2.55; y += 0.06) { const rz = fz(0, y) + 0.1; rings.push([y, Math.max(rz * 1.22, 0.98 + Math.max(0, y - 1.8) * 0.4), rz]); }
     const [y0, rx0, rz0] = rings[rings.length - 1];
-    for (let k = 1; k <= 10; k++) { const f = k / 10 * Math.PI / 2; rings.push([y0 + 0.66 * Math.sin(f), rx0 * Math.pow(Math.cos(f), 0.7), rz0 * Math.pow(Math.cos(f), 0.85)]); }
-    sheet(rings, [0, 2.07, 0.6, 0.44], bearBody); }
+    for (let k = 1; k <= 10; k++) { const f = k / 10 * Math.PI / 2; rings.push([y0 + 0.8 * Math.sin(f), rx0 * Math.cos(f), rz0 * Math.cos(f)]); }
+    sheet(rings, [0, 2.07, 0.6, 0.44], bearBody);
+    // and the rest of the sheet drapes down his sides and back to the floor, open at the front for his arms and mug
+    const drape = []; for (let y = 0.04; y <= 1.62; y += 0.08) { const rz = fz(0, y) + 0.12; drape.push([y, rz * 1.22 + 0.22 * Math.sin(Math.min(1, y / 1.2) * Math.PI * 0.75), rz]); }
+    sheet(drape, [0, -9, 0.1, 0.1], bearBody, 0.62); }
   { const prof = [[0.6, 0.7], [0.75, 0.69], [0.9, 0.68], [1.15, 0.64], [1.35, 0.62], [1.6, 0.72], [1.9, 0.76], [2.15, 0.74], [2.35, 0.64], [2.5, 0.46], [2.6, 0.25], [2.64, 0]];
     const rings = prof.map(([y, r]) => [y, r + 0.06, (y < 1.45 ? alienFrontZ(0, y) : 0.34) + 0.06]);
-    sheet(rings, [0, 1.02, 0.58, 0.3], alienBody); }
+    sheet(rings, [0, 1.02, 0.58, 0.3], alienBody);
+    const drape = []; for (let y = 0.03; y <= 0.82; y += 0.06) { const r = y < 0.3 ? 0.6 + y * 0.3 : 0.7; drape.push([y, r + 0.2, alienFrontZ(0, y) + 0.07]); }
+    sheet(drape, [0, -9, 0.1, 0.1], alienBody, 0.75); }
   // ---- devils: little red horns and pointy tails
   for (const sx of [-1, 1]) {
     const h = wear('devil', horn(0.075, 0.26), bearBody); h.position.set(sx * 0.3, 2.62, 0.2); h.rotation.set(0.15, 0, -sx * 0.35);
