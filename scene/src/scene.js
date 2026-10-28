@@ -1017,13 +1017,13 @@ const gregWitch = new THREE.Group(); croc.add(gregWitch); gregWitch.visible = fa
 }
 // …and a different costume each day of Halloween week (vampires on the night itself)
 const toon = (color, extra) => new THREE.MeshToonMaterial(Object.assign({ color, gradientMap: TOON_BANDS.cel }, extra || {}));
-const COSTUME_DAYS = ['vampire', 'pirate', 'vampire', 'witch', 'mummy', 'ghost', 'devil', 'vampire'];   // 24-31 Oct
+const COSTUME_DAYS = ['vampire', 'pirate', 'vampire', 'witch', 'mummy', 'traveller', 'devil', 'vampire'];   // 24-31 Oct
 function costumeToday(n) {
   if (params.has('costume')) return params.get('costume');
   if (params.has('halloween')) return 'vampire';
   return n.getMonth() === 9 && n.getDate() >= 24 ? COSTUME_DAYS[n.getDate() - 24] : null;
 }
-const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [] };
+const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [], traveller: [] };
 const wear = (name, obj, parent) => { parent.add(obj); obj.visible = false; COSTUME[name].push(obj); return obj; };
 function witchHat(r, h, band) {
   const g = new THREE.Group(), hatMat = toon(0x2e2140);
@@ -1177,6 +1177,83 @@ const bandage = toon(0xf0e8d6);
       const atFoot = rz * Math.sqrt(Math.max(0, 1 - (0.35 / rx) ** 2));
       body.push([y, rx, rz, Math.max(0, 0.74 - atFoot) * (1 - ss(0.4, 0.56, y))]); }
     sheet(body, [0, -9, 0.1, 0.1], alienBody, 0, { fx: 0.36, w: 0.26 }, 3); }
+  // ---- time travellers: a very long striped scarf and a fedora for Barry; a fez and a bow tie for Nom (and a tiny fez for Greg)
+  const scarfTex = (() => {
+    const c = document.createElement('canvas'); c.width = 8; c.height = 256; const g = c.getContext('2d');
+    const bands = [['#c8902e', 22], ['#7a2f3a', 14], ['#6b4a2e', 10], ['#2f6f6a', 18], ['#e9dcc0', 8], ['#8a5a9a', 12], ['#c8902e', 10],
+                   ['#3f5f8a', 16], ['#7a2f3a', 24], ['#e9dcc0', 10], ['#6b8a3a', 14], ['#b5532c', 18], ['#6b4a2e', 12], ['#2f6f6a', 10],
+                   ['#c8902e', 16], ['#8a5a9a', 10], ['#e9dcc0', 14], ['#7a2f3a', 8]];
+    let y = 0; while (y < 256) for (const [col, h] of bands) { g.fillStyle = col; g.fillRect(0, y, 8, h); y += h; }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.NearestFilter; return t;
+  })();
+  const scarfMat = toon(0xffffff, { map: scarfTex, side: THREE.DoubleSide });
+  // a flat knitted strip following a path (stripes run along it), with a little fringe at the end
+  function scarfStrip(pts, width, parent, stripesPerUnit = 1.6) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p)));
+    const N = 80, pos = [], uv = [], idx = [], L = curve.getLength();
+    for (let i = 0; i <= N; i++) {
+      const u = i / N, p = curve.getPointAt(u), tg = curve.getTangentAt(u);
+      const ref = Math.abs(tg.y) > 0.45 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+      const side = new THREE.Vector3().crossVectors(tg, ref).normalize().multiplyScalar(width / 2);
+      pos.push(p.x - side.x, p.y - side.y, p.z - side.z, p.x + side.x, p.y + side.y, p.z + side.z);
+      uv.push(0, u * L * stripesPerUnit, 1, u * L * stripesPerUnit);
+      if (i < N) idx.push(2 * i, 2 * i + 1, 2 * i + 3, 2 * i, 2 * i + 3, 2 * i + 2);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx); g.computeVertexNormals();
+    const grp = new THREE.Group(); grp.add(new THREE.Mesh(g, scarfMat));
+    const end = curve.getPointAt(1), tg = curve.getTangentAt(1);
+    const ref = Math.abs(tg.y) > 0.45 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0), side = new THREE.Vector3().crossVectors(tg, ref).normalize();
+    for (let k = 0; k < 6; k++) {
+      const f = new THREE.Mesh(new THREE.CylinderGeometry(width * 0.025, width * 0.025, width * 0.35, 5), toon(0xc8902e));
+      f.position.copy(end).addScaledVector(side, (k / 5 - 0.5) * width * 0.9).addScaledVector(tg, width * 0.16);
+      f.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tg); grp.add(f);
+    }
+    return wear('traveller', grp, parent);
+  }
+  { // Barry's scarf: wrapped round his neck, one end down his front and trailing along the floor, the other over his shoulder
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.1, 12, 64), scarfMat);
+    const rc = document.createElement('canvas'); rc.width = 256; rc.height = 8; const rg = rc.getContext('2d');
+    rg.translate(0, 8); rg.rotate(-Math.PI / 2); rg.drawImage(scarfTex.image, 0, 0);   // the same stripes, turned to run round the ring
+    const st = new THREE.CanvasTexture(rc); st.colorSpace = THREE.SRGBColorSpace; st.wrapS = THREE.RepeatWrapping; st.repeat.set(2.5, 1); st.magFilter = THREE.NearestFilter;
+    ring.material = toon(0xffffff, { map: st }); ring.rotation.x = Math.PI / 2; ring.position.y = 1.66; ring.scale.set(0.98 * 1.08, 0.98 * 0.87, 1.3);
+    wear('traveller', ring, bearBody);
+    const on = (x, y, out) => [x, y, fz(x, y) + out];
+    scarfStrip([on(-0.3, 1.62, 0.1), on(-0.4, 1.3, 0.07), on(-0.45, 0.95, 0.06), on(-0.42, 0.62, 0.08), [-0.35, 0.32, 1.45], [-0.15, 0.03, 1.78], [0.35, 0.02, 1.95], [0.75, 0.02, 1.85]], 0.3, bearBody);
+    scarfStrip([on(0.55, 1.66, 0.1), [0.98, 1.62, 0.35], [1.12, 1.25, 0.25], [1.2, 0.8, 0.3], [1.26, 0.35, 0.4], [1.3, 0.03, 0.62]], 0.3, bearBody);
+  }
+  { // Barry's fedora: a pinched crown with a dark band and a wide brim
+    const felt = toon(0x6e5440), g = new THREE.Group();
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.64, 0.035, 40), felt); g.add(brim);
+    const crownGeo = new THREE.CylinderGeometry(0.33, 0.38, 0.36, 40, 6);
+    { const p = crownGeo.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i), x = p.getX(i), z = p.getZ(i);
+        if (y > 0.17) p.setY(i, y - 0.09 * Math.exp(-(x * x) / 0.02) - 0.03);                 // the crease along the top
+        const pinch = 1 - 0.12 * Math.max(0, (y + 0.18) / 0.36) * Math.max(0, z / 0.38);      // pinched at the front
+        p.setX(i, x * pinch); }
+      crownGeo.computeVertexNormals(); }
+    const crown = new THREE.Mesh(crownGeo, felt); crown.position.y = 0.19; g.add(crown);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.385, 0.39, 0.08, 40), toon(0x2b2220)); band.position.y = 0.06; g.add(band);
+    g.position.set(-0.04, 2.74, 0.02); g.rotation.set(0.1, 0, 0.1);
+    wear('traveller', g, bearBody);
+  }
+  function fez(r) {
+    const g = new THREE.Group(), red = toon(0xb3202e);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r, r * 1.3, 32), red); body.position.y = r * 0.65; g.add(body);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.03, r * 0.03, r * 0.9, 6), toon(0x15121a));
+    cord.position.set(r * 0.55, r * 1.05, r * 0.2); cord.rotation.z = -0.5; g.add(cord);
+    const tassel = new THREE.Mesh(new THREE.ConeGeometry(r * 0.12, r * 0.45, 10), toon(0x15121a));
+    tassel.position.set(r * 0.82, r * 0.55, r * 0.25); g.add(tassel);
+    return g;
+  }
+  const nfez = wear('traveller', fez(0.2), alienBody); nfez.position.set(0.02, 1.5, 0.08); nfez.rotation.set(-0.05, 0, -0.12); nfez.scale.setScalar(1.15);
+  const gfez = wear('traveller', fez(0.07), croc); gfez.position.set(0.42, 0.56, 0.02); gfez.rotation.z = -0.35; gfez.scale.setScalar(1.6);
+  { // Nom's bow tie, under its mouth
+    const g = new THREE.Group(), red = toon(0x9b1d2c);
+    for (const sx of [-1, 1]) { const w = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.15, 4), red);
+      w.rotation.z = sx * Math.PI / 2; w.rotation.x = Math.PI / 4; w.scale.set(1, 1, 0.45); w.position.x = sx * 0.075; g.add(w); }
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.032, 14, 10), red); knot.scale.z = 0.6; g.add(knot);
+    g.position.set(0, 0.73, alienFrontZ(0, 0.73) + 0.05); g.scale.setScalar(1.45); wear('traveller', g, alienBody);
+  }
   // ---- devils: little red horns and pointy tails
   for (const sx of [-1, 1]) {
     const h = wear('devil', horn(0.075, 0.26), bearBody); h.position.set(sx * 0.3, 2.62, 0.2); h.rotation.set(0.15, 0, -sx * 0.35);
