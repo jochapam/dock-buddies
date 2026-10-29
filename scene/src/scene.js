@@ -318,7 +318,22 @@ function mug(r, h, parent) {
   const lemon = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.38, r * 0.38, r * 0.1, 24), M.lemon);
   lemon.rotation.set(Math.PI / 2, 0, 0.5); lemon.position.set(r * 0.72, h / 2 - r * 0.05, r * 0.35); iced.add(lemon);
   g.userData.setCold = (on) => { body.visible = coffee.visible = handle.visible = !on; iced.visible = on; };
+  // Captain's Day: a fine china teacup and saucer of Earl Grey instead
+  const teacup = new THREE.Group(); teacup.visible = false; g.add(teacup);
+  const china = gloss(0xfbf8f2, 0.18), goldTrim = gloss(0xd9b04a, 0.25);
+  const cp = [[0, -h * 0.12], [r * 0.5, -h * 0.12], [r * 0.56, -h * 0.08], [r * 0.85, h * 0.08], [r * 1.12, h * 0.3], [r * 1.08, h * 0.31],
+              [r * 0.82, h * 0.1], [r * 0.5, -h * 0.06], [0, -h * 0.06]].map(([x, y]) => new THREE.Vector2(x, y));
+  teacup.add(new THREE.Mesh(new THREE.LatheGeometry(cp, 48), china));
+  const cupRim = new THREE.Mesh(new THREE.TorusGeometry(r * 1.1, r * 0.03, 8, 48), goldTrim); cupRim.rotation.x = Math.PI / 2; cupRim.position.y = h * 0.305; teacup.add(cupRim);
+  const saucer = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.5, r * 0.9, h * 0.06, 48), china); saucer.position.y = -h * 0.15; teacup.add(saucer);
+  const saucerRim = new THREE.Mesh(new THREE.TorusGeometry(r * 1.49, r * 0.025, 8, 48), goldTrim); saucerRim.rotation.x = Math.PI / 2; saucerRim.position.y = -h * 0.12; teacup.add(saucerRim);
+  const tea = new THREE.Mesh(new THREE.CircleGeometry(1, 40), gloss(0x9a5a22, 0.05)); tea.rotation.x = -Math.PI / 2; teacup.add(tea);
+  const cupHandle = new THREE.Mesh(new THREE.TorusGeometry(h * 0.1, r * 0.06, 10, 24, Math.PI * 1.4), china);
+  cupHandle.rotation.z = -Math.PI * 0.7; cupHandle.position.set(r * 1.1, h * 0.12, 0); teacup.add(cupHandle);
+  g.userData.setTea = (on) => { if (!on) { teacup.visible = false; return; } body.visible = coffee.visible = handle.visible = iced.visible = marsh.visible = false; teacup.visible = true; };
+  g.userData.teaLevel = (k) => { const y = -h * 0.06 + (h * 0.33) * Math.max(0.08, k); tea.position.y = y; tea.scale.setScalar(r * (0.5 + 0.58 * Math.max(0.08, k))); };
   g.userData.setLevel = (k) => {
+    g.userData.teaLevel(k);
     coffee.position.y = (-h / 2 + 0.05) + (h - 0.105) * k; coffee.scale.setScalar(0.97 + 0.03 * k);
     drink.scale.y = 0.01 + (h - 0.11) * k; ice.position.y = -h / 2 + 0.06 + (h - 0.11) * Math.max(k, 0.25) - r * 0.12;
   };
@@ -1017,13 +1032,13 @@ const gregWitch = new THREE.Group(); croc.add(gregWitch); gregWitch.visible = fa
 }
 // …and a different costume each day of Halloween week (vampires on the night itself)
 const toon = (color, extra) => new THREE.MeshToonMaterial(Object.assign({ color, gradientMap: TOON_BANDS.cel }, extra || {}));
-const COSTUME_DAYS = ['vampire', 'pirate', 'vampire', 'witch', 'mummy', 'traveller', 'devil', 'vampire'];   // 24-31 Oct
+const COSTUME_DAYS = ['vampire', 'pirate', 'vampire', 'witch', 'mummy', 'traveller', 'captain', 'vampire'];   // 24-31 Oct
 function costumeToday(n) {
   if (params.has('costume')) return params.get('costume');
   if (params.has('halloween')) return 'vampire';
   return n.getMonth() === 9 && n.getDate() >= 24 ? COSTUME_DAYS[n.getDate() - 24] : null;
 }
-const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [], traveller: [] };
+const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [], traveller: [], captain: [] };
 const wear = (name, obj, parent) => { parent.add(obj); obj.visible = false; COSTUME[name].push(obj); return obj; };
 function witchHat(r, h, band) {
   const g = new THREE.Group(), hatMat = toon(0x2e2140);
@@ -1254,6 +1269,25 @@ const bandage = toon(0xf0e8d6);
     const knot = new THREE.Mesh(new THREE.SphereGeometry(0.032, 14, 10), red); knot.scale.z = 0.6; g.add(knot);
     g.position.set(0, 0.73, alienFrontZ(0, 0.73) + 0.05); g.scale.setScalar(1.45); wear('traveller', g, alienBody);
   }
+  // ---- Captain's Day: starship uniforms (painted onto their bodies by the shader below), rank pips, a badge, and stars behind them
+  const goldPip = gloss(0xe0b84a, 0.25);
+  const badge = (scale) => { const g = new THREE.Group();          // an original badge: a gold oval with a little star
+    const oval = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.016, 10, 28), goldPip); oval.scale.y = 1.25; g.add(oval);
+    const back = new THREE.Mesh(new THREE.CircleGeometry(0.058, 24), toon(0x1d1b22)); back.scale.y = 1.25; back.position.z = -0.004; g.add(back);
+    const sh = new THREE.Shape(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 + Math.PI / 2, rr = i % 2 ? 0.018 : 0.045; (i ? sh.lineTo : sh.moveTo).call(sh, Math.cos(a) * rr, Math.sin(a) * rr); }
+    const star = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.01, bevelEnabled: false }), goldPip); g.add(star);
+    g.scale.setScalar(scale); return g; };
+  { const b = wear('captain', badge(1.3), bearBody); b.position.set(0.42, 1.48, fz(0.42, 1.48) + 0.02); b.rotation.y = 0.35;
+    for (let k = 0; k < 4; k++) { const pip = wear('captain', new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), goldPip), bearBody);   // four pips on his right collar
+      const x = -0.34 - k * 0.075, y = 1.66 - k * 0.012; pip.scale.z = 0.6; pip.position.set(x, y, fz(-x, y) + 0.02); }
+    const n = wear('captain', badge(0.75), alienBody); n.position.set(0.26, 0.7, alienFrontZ(0.26, 0.7) + 0.02); n.rotation.y = 0.3;
+    for (let k = 0; k < 2; k++) { const pip = wear('captain', new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 8), goldPip), alienBody);
+      const x = -0.2 - k * 0.055; pip.scale.z = 0.6; pip.position.set(x, 0.76, alienFrontZ(-x, 0.76) + 0.015); } }
+  { const N = 140, pos = new Float32Array(N * 3), seed = (i) => { const v = Math.sin(i * 127.1) * 43758.5453; return v - Math.floor(v); };
+    for (let i = 0; i < N; i++) pos.set([-4 + 8 * seed(i), 0.4 + 3.4 * seed(i + 300), -2.4 - 1.2 * seed(i + 600)], i * 3);
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const stars = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xcfe0ff, size: 0.07, map: puffTexEarly(), transparent: true, depthWrite: false, opacity: 0.9 }));
+    stars.userData.base = pos.slice(); wear('captain', stars, scene); window.__stars = stars; }
   // ---- devils: little red horns and pointy tails
   for (const sx of [-1, 1]) {
     const h = wear('devil', horn(0.075, 0.26), bearBody); h.position.set(sx * 0.3, 2.62, 0.2); h.rotation.set(0.15, 0, -sx * 0.35);
@@ -1283,6 +1317,40 @@ function patchGhostly() {
     o.children.forEach(walk); };
   walk(bearBody); walk(alienBody);
 }
+// Captain's Day uniforms: coloured shoulders and chest, black below, painted onto the body by height.
+const UNIFORM = { on: { value: 0 }, tug: { value: 0 } };
+let uniformPatched = false;
+function patchUniforms() {
+  const kit = [[bearBody, new THREE.Vector4(1.2, 1.76, 0.42, 0), new THREE.Color(0x80141b)],     // Barry: command red
+               [alienBody, new THREE.Vector4(0.6, 0.8, 0.3, 1), new THREE.Color(0x1f6f9e)]];      // Nom: science blue
+  for (const [root, cut, col] of kit) {
+    const walk = (o) => { if (o === bearMug || o === alienMug || o === croc) return;
+      if (o.isMesh) for (const m of [].concat(o.material)) if (m.userData.plush && !m.userData.uniformed) {
+        m.userData.uniformed = true;
+        const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
+        m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
+          Object.assign(sh.uniforms, { uUni: UNIFORM.on, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col } });
+          sh.vertexShader = 'varying vec3 vUni;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvUni = position;');
+          sh.fragmentShader = 'uniform float uUni, uTug; uniform vec4 uCut; uniform vec3 uCol; varying vec3 vUni;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+            { float y = vUni.y + uTug;                                                   // a tug pulls the whole top down a touch
+              float collar = uCut.y - 0.06 * smoothstep(0.0, 0.5, vUni.z) * (1.0 - abs(vUni.x));   // dips a little at the front
+              bool feet = uCut.w < 0.5
+                ? (length((vec3(abs(vUni.x), vUni.y, vUni.z) - vec3(0.58, 0.36, 0.62)) / vec3(0.54, 0.46, 0.66)) < 1.05    // his legs and feet stay furry
+                   || (abs(vUni.x) > 0.2 && abs(vUni.x) < 0.62 && vUni.y > 0.7 && vUni.y < 1.25 && vUni.z > 0.98))                                    // and so do his paws
+                : (vUni.y < 0.45 && vUni.z > 0.28);
+              if (uUni > 0.5 && y < collar && y > uCut.z && !feet) {
+                float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+                vec3 c = y > uCut.x ? uCol : vec3(0.035, 0.032, 0.045);
+                diffuseColor.rgb = c * (0.85 + 0.2 * gl); } }`);
+        };
+        m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-uniform' + (root === bearBody ? 'B' : 'N');
+        m.needsUpdate = true;
+      }
+      o.children.forEach(walk); };
+    walk(root);
+  }
+}
+const TUG_TIMES = sipSchedule(17011, 40, 90, 200);   // Barry straightens his tunic now and then
 const tree = new THREE.Group(); scene.add(tree); tree.position.set(1.4, 0, 1.45);
 const treeLights = [];
 {
@@ -2125,6 +2193,15 @@ function pose(t) {
   for (const k in COSTUME) COSTUME[k].forEach(o => (o.visible = k === costume));
   if (costume === 'ghost' && !ghostPatched) { patchGhostly(); ghostPatched = true; }
   GHOST.value = costume === 'ghost' ? 1 : 0;
+  const captain = costume === 'captain';
+  if (captain && !uniformPatched) { patchUniforms(); uniformPatched = true; }
+  UNIFORM.on.value = captain ? 1 : 0;
+  { const tg = params.has('tug') ? +params.get('tug') : lastStart(t, TUG_TIMES).since;      // the tug: down sharply, then it settles back
+    UNIFORM.tug.value = captain && !params.has('rest') || params.has('tug') ? 0.07 * (tg < 0.25 ? smooth(tg / 0.25) : Math.max(0, 1 - (tg - 0.25) / 0.9)) * (tg < 1.15 ? 1 : 0) : 0; }
+  bearMug.userData.setTea(captain);
+  if (captain && window.__stars) { const st = window.__stars, p = st.geometry.attributes.position, b = st.userData.base;
+    for (let i = 0; i < p.count; i++) { let x = b[i * 3] - t * 0.05 * (1 + (i % 3) * 0.4); x = ((x + 4) % 8 + 8) % 8 - 4; p.setX(i, x); }
+    p.needsUpdate = true; st.material.opacity = 0.75 + 0.15 * Math.sin(t * 1.7); }
   vampire.children.forEach(c => { if (c.geometry.type === 'ConeGeometry') c.visible = !bearYawn.visible; });   // fangs tuck away for a yawn
   batWings.forEach((w, i) => { w.rotation.y = (i ? -1 : 1) * (0.35 + 0.18 * Math.sin(t * 2.2)); });
   if (halloween) {
