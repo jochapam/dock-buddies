@@ -1271,11 +1271,14 @@ const bandage = toon(0xf0e8d6);
   }
   // ---- Captain's Day: starship uniforms (painted onto their bodies by the shader below), rank pips, a badge, and stars behind them
   const goldPip = gloss(0xe0b84a, 0.25);
-  const badge = (scale) => { const g = new THREE.Group();          // a simple gold triangle, straight sides
+  const badge = (scale) => { const g = new THREE.Group();          // a simple white triangle with gold trim and a dark star, straight sides
     const sh = new THREE.Shape(); sh.moveTo(0, 0.075); sh.lineTo(0.058, -0.05); sh.lineTo(-0.058, -0.05); sh.lineTo(0, 0.075);
-    g.add(new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 2 }), goldPip));
+    const tri = (k, mat, z) => { const m = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.005, bevelSize: 0.005, bevelSegments: 2 }), mat);
+      m.scale.set(k, k, 1); m.position.set(0, 0.006 * (1 - k), z); g.add(m); };
+    tri(1.22, goldPip, -0.004);                       // gold trim round the edge
+    tri(1.0, gloss(0xf4f2ee, 0.2), 0.004);            // white face
     const st = new THREE.Shape(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 + Math.PI / 2, rr = i % 2 ? 0.0095 : 0.024; (i ? st.lineTo : st.moveTo).call(st, Math.cos(a) * rr, Math.sin(a) * rr); }
-    const star = new THREE.Mesh(new THREE.ShapeGeometry(st), toon(0x2a2026)); star.position.set(0, -0.006, 0.02); g.add(star);   // a little dark star
+    const star = new THREE.Mesh(new THREE.ShapeGeometry(st), toon(0x2a2026)); star.position.set(0, -0.006, 0.026); g.add(star);   // a little dark star
     g.scale.setScalar(scale); return g; };
   { const b = wear('captain', badge(1.3), bearBody); b.position.set(0.42, 1.36, fz(0.42, 1.36) + 0.02); b.rotation.y = 0.35;
     for (let k = 0; k < 4; k++) { const pip = wear('captain', new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), goldPip), bearBody);   // four pips on his right collar
