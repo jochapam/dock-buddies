@@ -184,6 +184,8 @@ export const SURPRISES = [
                           ['N', 'Thank you.', 'happy', 'happy']] },
   { fx: 'search', then: 'croc', lines: [['N', 'Where\'s Greg?!', 'normal', 'curious'], ['B', 'Behind you.', 'happy', 'curious'],
                                        ['N', 'GREG!', 'happy', 'giggle']] },
+  { when: (c) => c.costume === 'captain', fx: 'beam', then: 'croc',
+    lines: [['B', 'Prepare to beam Greg aboard.', 'normal', 'normal'], ['N', 'Greg? …Greg!!', 'wonder', 'giggle']] },
 ];
 
 // Ghost day: every few minutes one of them does a spooky ghost noise (fx 'boo' sways them about while they do)

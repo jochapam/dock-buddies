@@ -1518,6 +1518,19 @@ const sparkTex = (() => {
 })();
 const sparks = [0, 1, 2].map(() => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, transparent: true, depthWrite: false })); sp.visible = false; scene.add(sp); return sp; });
 
+// Transporter sparkles — blue-white, additive, used for the 'beam' fx
+const beamSparkTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'); g.translate(32, 32);
+  const star = (r1, r2, n) => { g.beginPath(); for (let i = 0; i < n * 2; i++) { const a = i * Math.PI / n - Math.PI / 2, r = i % 2 ? r2 : r1; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); };
+  star(28, 8, 4); g.fillStyle = '#c8e8ff'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#ffffff'; g.stroke();
+  return new THREE.CanvasTexture(c);
+})();
+const beamSparks = Array.from({ length: 14 }, (_, i) => {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: beamSparkTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sp.visible = false; sp.userData = { seed: i * 137.508 }; scene.add(sp); return sp;
+});
+
 // =====================================================================
 // Steam from the bear's mug
 // =====================================================================
@@ -2356,6 +2369,35 @@ function pose(t) {
       sp.material.opacity = Math.min(1, W.clink * 2);
     });
   } else sparks.forEach(sp => (sp.visible = false));
+
+  // beam transporter effect — sparkles swirl around Nom's arm, Greg fades in on line 1
+  if (fx === 'beam' && W.chat) {
+    const onLine1 = W.chat.line === 1;
+    const fadeIn = onLine1 ? smooth(Math.min(1, W.chat.lineT / 1.8)) : 0;   // Greg fades in over ~1.8s on line 1
+    const sparkAmt = onLine1 ? smooth(Math.min(1, W.chat.lineT * 2)) * (1 - smooth((W.chat.lineT - W.chat.len + 0.6) / 0.4))
+                              : smooth(Math.min(1, W.chat.lineT));            // build during line 0, hold on line 1
+    alien.getWorldPosition(_zp);
+    const cx = _zp.x - 0.18, cy = _zp.y + 0.1, cz = _zp.z + 0.12;
+    beamSparks.forEach((sp, i) => {
+      const seed = sp.userData.seed, phase = seed + t * (1.4 + (i % 3) * 0.3);
+      const r = 0.18 + 0.1 * Math.sin(seed * 7.3);
+      sp.visible = sparkAmt > 0.02;
+      sp.position.set(cx + r * Math.cos(phase), cy + 0.18 * Math.sin(phase * 0.7 + seed), cz + 0.06 * Math.sin(phase * 1.3));
+      const sz = (0.06 + 0.04 * Math.sin(seed * 3.1 + t * 2)) * sparkAmt;
+      sp.scale.set(sz, sz, sz);
+      sp.material.opacity = sparkAmt * (0.5 + 0.5 * Math.sin(seed + t * 3));
+      sp.material.rotation = seed + t;
+    });
+    // fade Greg in — override normal croc visibility during beam
+    croc.visible = fadeIn > 0.01;
+    if (croc.visible) {
+      croc.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) { m.transparent = true; m.opacity = fadeIn; } });
+    }
+  } else {
+    beamSparks.forEach(sp => (sp.visible = false));
+    // restore Greg's opacity to solid when beam is done
+    croc.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) { if (m.transparent && m.opacity < 1) { m.opacity = 1; } } });
+  }
 
   // eyes
   const blink = blinking(t, 3.9, 0.5);
