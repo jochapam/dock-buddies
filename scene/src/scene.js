@@ -1271,11 +1271,9 @@ const bandage = toon(0xf0e8d6);
   }
   // ---- Captain's Day: starship uniforms (painted onto their bodies by the shader below), rank pips, a badge, and stars behind them
   const goldPip = gloss(0xe0b84a, 0.25);
-  const badge = (scale) => { const g = new THREE.Group();          // an original badge: a gold oval with a little star
-    const oval = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.016, 10, 28), goldPip); oval.scale.y = 1.25; g.add(oval);
-    const back = new THREE.Mesh(new THREE.CircleGeometry(0.058, 24), toon(0x1d1b22)); back.scale.y = 1.25; back.position.z = -0.004; g.add(back);
-    const sh = new THREE.Shape(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 + Math.PI / 2, rr = i % 2 ? 0.018 : 0.045; (i ? sh.lineTo : sh.moveTo).call(sh, Math.cos(a) * rr, Math.sin(a) * rr); }
-    const star = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.01, bevelEnabled: false }), goldPip); g.add(star);
+  const badge = (scale) => { const g = new THREE.Group();          // a simple gold triangle, straight sides
+    const sh = new THREE.Shape(); sh.moveTo(0, 0.075); sh.lineTo(0.058, -0.05); sh.lineTo(-0.058, -0.05); sh.lineTo(0, 0.075);
+    g.add(new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 2 }), goldPip));
     g.scale.setScalar(scale); return g; };
   { const b = wear('captain', badge(1.3), bearBody); b.position.set(0.42, 1.36, fz(0.42, 1.36) + 0.02); b.rotation.y = 0.35;
     for (let k = 0; k < 4; k++) { const pip = wear('captain', new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), goldPip), bearBody);   // four pips on his right collar
