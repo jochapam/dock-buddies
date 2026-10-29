@@ -1277,10 +1277,10 @@ const bandage = toon(0xf0e8d6);
     const sh = new THREE.Shape(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 + Math.PI / 2, rr = i % 2 ? 0.018 : 0.045; (i ? sh.lineTo : sh.moveTo).call(sh, Math.cos(a) * rr, Math.sin(a) * rr); }
     const star = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.01, bevelEnabled: false }), goldPip); g.add(star);
     g.scale.setScalar(scale); return g; };
-  { const b = wear('captain', badge(1.3), bearBody); b.position.set(0.42, 1.48, fz(0.42, 1.48) + 0.02); b.rotation.y = 0.35;
+  { const b = wear('captain', badge(1.3), bearBody); b.position.set(0.42, 1.36, fz(0.42, 1.36) + 0.02); b.rotation.y = 0.35;
     for (let k = 0; k < 4; k++) { const pip = wear('captain', new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), goldPip), bearBody);   // four pips on his right collar
       const x = -0.34 - k * 0.075, y = 1.66 - k * 0.012; pip.scale.z = 0.6; pip.position.set(x, y, fz(-x, y) + 0.02); }
-    const n = wear('captain', badge(0.75), alienBody); n.position.set(0.26, 0.7, alienFrontZ(0.26, 0.7) + 0.02); n.rotation.y = 0.3;
+    const n = wear('captain', badge(0.75), alienBody); n.position.set(0.27, 0.64, alienFrontZ(0.27, 0.64) + 0.02); n.rotation.y = 0.3;
     for (let k = 0; k < 2; k++) { const pip = wear('captain', new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 8), goldPip), alienBody);
       const x = -0.2 - k * 0.055; pip.scale.z = 0.6; pip.position.set(x, 0.76, alienFrontZ(-x, 0.76) + 0.015); } }
   { const N = 140, pos = new Float32Array(N * 3), seed = (i) => { const v = Math.sin(i * 127.1) * 43758.5453; return v - Math.floor(v); };
@@ -1317,12 +1317,12 @@ function patchGhostly() {
     o.children.forEach(walk); };
   walk(bearBody); walk(alienBody);
 }
-// Captain's Day uniforms: coloured shoulders and chest, black below, painted onto the body by height.
+// Captain's Day uniforms: a black band across the shoulders and colour below, painted onto the body by height.
 const UNIFORM = { on: { value: 0 }, tug: { value: 0 } };
 let uniformPatched = false;
 function patchUniforms() {
-  const kit = [[bearBody, new THREE.Vector4(1.2, 1.76, 0.42, 0), new THREE.Color(0x80141b)],     // Barry: command red
-               [alienBody, new THREE.Vector4(0.6, 0.8, 0.3, 1), new THREE.Color(0x1f6f9e)]];      // Nom: science blue
+  const kit = [[bearBody, new THREE.Vector4(1.52, 1.76, 0.42, 0), new THREE.Color(0x80141b)],     // Barry: command red
+               [alienBody, new THREE.Vector4(0.73, 0.8, 0.3, 1), new THREE.Color(0x1f6f9e)]];      // Nom: science blue
   for (const [root, cut, col] of kit) {
     const walk = (o) => { if (o === bearMug || o === alienMug || o === croc) return;
       if (o.isMesh) for (const m of [].concat(o.material)) if (m.userData.plush && !m.userData.uniformed) {
@@ -1340,7 +1340,7 @@ function patchUniforms() {
                 : (vUni.y < 0.45 && vUni.z > 0.28);
               if (uUni > 0.5 && y < collar && y > uCut.z && !feet) {
                 float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-                vec3 c = y > uCut.x ? uCol : vec3(0.035, 0.032, 0.045);
+                vec3 c = y > uCut.x ? vec3(0.035, 0.032, 0.045) : uCol;   // a black band across the shoulders, colour below
                 diffuseColor.rgb = c * (0.85 + 0.2 * gl); } }`);
         };
         m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-uniform' + (root === bearBody ? 'B' : 'N');
