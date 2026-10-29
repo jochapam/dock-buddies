@@ -169,6 +169,7 @@ export const CHATS = [
   { when: (c) => c.costume === 'captain', lines: [['N', 'Why do you keep tugging your top?', 'normal', 'curious'], ['B', 'A captain must look his best.', 'happy', 'giggle']] },
   { when: (c) => c.costume === 'captain', lines: [['N', 'What\'s the best thing about space?', 'normal', 'curious'], ['B', 'The tea breaks.', 'happy', 'giggle']] },
   { when: (c) => c.costume === 'captain', lines: [['B', 'Shall we see what\'s out there?', 'normal', 'wonder'], ['N', 'Yes please!', 'happy', 'happy']] },
+  { when: (c) => c.costume === 'captain', lines: [['B', 'And you are?', 'normal', 'curious'], ['N', 'I\'m Nom-ber one!', 'happy', 'giggle']] },
   { when: (c) => c.costume === 'devil', lines: [['N', 'Do I look scary?', 'normal', 'curious'], ['B', 'Terrifying.', 'happy', 'normal'], ['N', 'Rawr!', 'happy', 'giggle']] },
   { when: (c) => c.costume === 'devil', lines: [['B', 'This coffee is devilishly good.', 'happy', 'normal'], ['N', 'Hehehe!', 'happy', 'giggle']] },
   { when: (c) => c.month === 9 && c.date >= 24, lines: [['N', 'Barry… the pumpkin is looking at me.', 'normal', 'o'],
