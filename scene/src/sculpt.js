@@ -251,6 +251,7 @@ export function poses(maxAngle, pivot, build, material, parent, count = 9, extra
     };
     const mesh = new THREE.Mesh(build(armsAt, toRest, k >= count ? e : null), material);
     mesh.visible = k === 0;
+    mesh.userData.toRest = toRest;        // (lets paint-on effects find where an arm point sat at rest)
     parent.add(mesh);
     meshes.push(mesh);
   }

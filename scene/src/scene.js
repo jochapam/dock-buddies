@@ -1323,7 +1323,63 @@ function patchGhostly() {
 // Captain's Day uniforms: a black band across the shoulders and colour below, painted onto the body by height.
 const UNIFORM = { on: { value: 0 }, tug: { value: 0 } };
 let uniformPatched = false;
+// Each arm pose is its own body mesh, so the paint is placed by where each point sat at rest: lifted arms keep
+// their sleeves instead of picking up the shoulder band and chest as they pass through them.
+function restCoords(rest) {
+  // the resting surface's vertices, sorted into a grid of cells for quick nearest-point lookups
+  const H = 0.04, rp = rest.geometry.attributes.position.array, rn = rp.length / 3;
+  rest.geometry.computeBoundingBox(); const lo = rest.geometry.boundingBox.min.clone().subScalar(H);
+  const NX = Math.ceil((rest.geometry.boundingBox.max.x - lo.x) / H) + 2, NY = Math.ceil((rest.geometry.boundingBox.max.y - lo.y) / H) + 2,
+        NZ = Math.ceil((rest.geometry.boundingBox.max.z - lo.z) / H) + 2;
+  const cellOf = (x, y, z) => { const cx = Math.floor((x - lo.x) / H), cy = Math.floor((y - lo.y) / H), cz = Math.floor((z - lo.z) / H);
+    return cx < 0 || cy < 0 || cz < 0 || cx >= NX || cy >= NY || cz >= NZ ? -1 : (cx * NY + cy) * NZ + cz; };
+  const start = new Int32Array(NX * NY * NZ + 1), order = new Int32Array(rn);
+  for (let i = 0; i < rn; i++) start[cellOf(rp[i * 3], rp[i * 3 + 1], rp[i * 3 + 2]) + 1]++;
+  for (let c = 0; c < NX * NY * NZ; c++) start[c + 1] += start[c];
+  const fill = start.slice(0, -1);
+  for (let i = 0; i < rn; i++) order[fill[cellOf(rp[i * 3], rp[i * 3 + 1], rp[i * 3 + 2])]++] = i;
+  const near = (x, y, z) => {   // squared distance to the resting surface (just its vertices, which are close enough), up to H
+    let d = H * H;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const cell = cellOf(x + a * H, y + b * H, z + c * H); if (cell < 0) continue;
+      for (let k = start[cell]; k < start[cell + 1]; k++) {
+        const i = order[k] * 3, dx = rp[i] - x, dy = rp[i + 1] - y, dz = rp[i + 2] - z;
+        d = Math.min(d, dx * dx + dy * dy + dz * dz);
+      }
+    }
+    return d;
+  };
+  return (mesh) => {
+    if (mesh === rest || !mesh.userData.toRest || mesh.geometry.attributes.uniRest) return;
+    const pp = mesh.geometry.attributes.position, n = pp.count, out = new Float32Array(n * 4), back = new Float32Array(n * 3);
+    let score = new Float32Array(n);   // > 0: a moved arm point, which lies on the resting surface once put back
+    for (let i = 0; i < n; i++) {
+      const x = pp.getX(i), y = pp.getY(i), z = pp.getZ(i), r = mesh.userData.toRest(x, y, z), da = near(x, y, z);
+      back.set(r, i * 3); score[i] = da < 1e-6 ? -0.03 : Math.sqrt(da) - Math.sqrt(near(r[0], r[1], r[2]));   // (unmoved: no need to look further)
+    }
+    // a few rounds of averaging with neighbours, so stray points don't flip and leave speckles
+    const idx = mesh.geometry.index.array, first = new Int32Array(n + 1), nb = new Int32Array(idx.length * 2);
+    for (let f = 0; f < idx.length; f++) first[idx[f] + 1] += 2;
+    for (let i = 0; i < n; i++) first[i + 1] += first[i];
+    const put = first.slice(0, -1);
+    for (let f = 0; f < idx.length; f += 3) for (let e = 0; e < 3; e++) { const v = idx[f + e]; nb[put[v]++] = idx[f + (e + 1) % 3]; nb[put[v]++] = idx[f + (e + 2) % 3]; }
+    for (let round = 0; round < 8; round++) {
+      const next = new Float32Array(n);
+      for (let i = 0; i < n; i++) { let sum = score[i]; for (let k = first[i]; k < first[i + 1]; k++) sum += score[nb[k]]; next[i] = sum / (1 + first[i + 1] - first[i]); }
+      score = next;
+    }
+    for (let i = 0; i < n; i++)
+      out.set(score[i] > 0 ? [back[i * 3], back[i * 3 + 1], back[i * 3 + 2], 0] : [pp.getX(i), pp.getY(i), pp.getZ(i), 1], i * 4);
+    mesh.geometry.setAttribute('uniRest', new THREE.BufferAttribute(out, 4));
+  };
+}
+const uniformQueue = [];   // pose meshes still to be given their resting coordinates, one a frame (drinking poses first)
 function patchUniforms() {
+  const waving = new Set([...bearWave.meshes, ...nomWave.meshes]);   // (a paw held up to wave looks best bare, as before)
+  for (const [root, rest, first] of [[bearBody, bearPoses.meshes[0], bearPoses.meshes], [alienBody, alienPoses.meshes[0], alienPoses.meshes]]) {
+    const coords = restCoords(rest);
+    for (const o of new Set([...first, ...root.children])) if (o.isMesh && o.userData.toRest && !waving.has(o)) uniformQueue.push(() => coords(o));
+  }
   const kit = [[bearBody, new THREE.Vector4(1.52, 1.76, 0.42, 0), new THREE.Color(0x80141b)],     // Barry: command red
                [alienBody, new THREE.Vector4(0.73, 0.8, 0.3, 1), new THREE.Color(0x1f6f9e)]];      // Nom: science blue
   for (const [root, cut, col] of kit) {
@@ -1333,7 +1389,7 @@ function patchUniforms() {
         const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
         m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
           Object.assign(sh.uniforms, { uUni: UNIFORM.on, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col } });
-          sh.vertexShader = 'varying vec3 vUni;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvUni = position;');
+          sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvUni = uniRest.w < 0.5 ? uniRest.xyz : position;');   // (w is 1 where there's no uniRest)
           sh.fragmentShader = 'uniform float uUni, uTug; uniform vec4 uCut; uniform vec3 uCol; varying vec3 vUni;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
             { float y = vUni.y + uTug;                                                   // a tug pulls the whole top down a touch
               float collar = uCut.y - 0.06 * smoothstep(0.0, 0.5, vUni.z) * (1.0 - abs(vUni.x));   // dips a little at the front
@@ -1518,17 +1574,19 @@ const sparkTex = (() => {
 })();
 const sparks = [0, 1, 2].map(() => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, transparent: true, depthWrite: false })); sp.visible = false; scene.add(sp); return sp; });
 
-// Transporter sparkles — blue-white, additive, used for the 'beam' fx
-const beamSparkTex = (() => {
+// Transporter sparkles for the 'beam' surprise: gold and ice-blue twinkles with a dark rim, so they show on the cream
+const beamSparkTex = ['#ffd75e', '#9fdcff'].map(fill => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d'); g.translate(32, 32);
-  const star = (r1, r2, n) => { g.beginPath(); for (let i = 0; i < n * 2; i++) { const a = i * Math.PI / n - Math.PI / 2, r = i % 2 ? r2 : r1; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); };
-  star(28, 8, 4); g.fillStyle = '#c8e8ff'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#ffffff'; g.stroke();
+  g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, r = i % 2 ? 7 : 28; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath();
+  g.fillStyle = fill; g.fill(); g.lineWidth = 3; g.strokeStyle = 'rgba(90, 70, 40, 0.75)'; g.stroke();
+  g.beginPath(); g.arc(0, 0, 6, 0, 2 * Math.PI); g.fillStyle = '#ffffff'; g.fill();
   return new THREE.CanvasTexture(c);
-})();
-const beamSparks = Array.from({ length: 14 }, (_, i) => {
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: beamSparkTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-  sp.visible = false; sp.userData = { seed: i * 137.508 }; scene.add(sp); return sp;
+});
+const _beamGlow = new THREE.Color(0.35, 0.6, 0.8);
+const beamSparks = Array.from({ length: 22 }, (_, i) => {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: beamSparkTex[i % 2], transparent: true, depthWrite: false }));
+  sp.visible = false; sp.renderOrder = 2; sp.userData = { seed: i * 137.508 }; scene.add(sp); return sp;
 });
 
 // =====================================================================
@@ -1772,14 +1830,18 @@ function direct(t) {
   const jamming = MUSIC.on && !act && D.sleep < 0.5 && bdayT === Infinity;   // the same stretch as on waking, once the mugs are down
 
   // Nom's crocodile: comes out for a cuddle, and always when Nom is asleep
-  const wantCroc = (act === 'presents' && actT > 5.5 && actT < ACT_LEN.presents - 2 * MUG_MOVE - 0.4) || ((act === 'croc' || act === 'story' || act === 'movie') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories and watches movies too
+  // beaming Greg aboard: Nom's mug goes down while Barry gives the order, then Greg arrives straight in Nom's arms
+  const beamChat = D.chat && D.chat.conv.fx === 'beam' ? D.chat : null;
+  const beamT = beamChat ? t - beamChat.start - lineLength(beamChat.conv.lines[0]) : -Infinity;   // from the start of Nom's line
+  if (beamT >= 0 && D.beamAt == null && D.nMug >= 1) { D.beamAt = t; D.croc = 1; }
+  const wantCroc = (beamChat && D.beamAt != null) || (D.pendingAct === 'croc' && D.croc > 0) || (act === 'presents' && actT > 5.5 && actT < ACT_LEN.presents - 2 * MUG_MOVE - 0.4) || ((act === 'croc' || act === 'story' || act === 'movie') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories and watches movies too
   // mugs: put down (bending over) before sleeping, stretching or cuddling Greg; picked up again afterwards
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
   const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2)
                   || (act === 'refill' && actT < 11.2)    // Barry sets his mug down next to Nom for a top-up
                   || (act === 'movie' && actT < ACT_LEN.movie - MUG_MOVE - 0.2) || (act === 'presents' && actT < ACT_LEN.presents - MUG_MOVE - 0.2) || jamming || D.jamIn > 0;
   const wantPot = act === 'refill' && actT < 9.6;
-  const nomWants = bearWants || wantCroc || D.croc > 0 || wantPot || D.pot > 0;
+  const nomWants = bearWants || beamChat || wantCroc || D.croc > 0 || wantPot || D.pot > 0;
   // instruments come out once the mugs are down, and go away before they're picked up
   D.jamIn = (jamming && D.bMug >= 1 && D.nMug >= 1) ? Math.min(1, (D.jamIn || 0) + dt / 0.6) : Math.max(0, (D.jamIn || 0) - dt / 0.6);
   if (params.has('jam')) D.jamIn = 1;
@@ -1794,6 +1856,10 @@ function direct(t) {
   if (params.has('croc')) { D.nMug = 1; D.croc = +params.get('croc'); }
   else if (wantCroc && D.nMug >= 1) D.croc = Math.min(1, D.croc + dt / 1.6);       // reaches round and brings Greg out
   else if (!wantCroc) D.croc = Math.max(0, D.croc - dt / 1.6);                      // and puts him back
+  if (D.croc === 0 && !beamChat) D.beamAt = null;
+  // the sparkles build while Barry speaks and die away as Greg appears; Greg fades in over 1.8 s
+  const beamIn = D.beamAt != null ? Math.max(0.001, smooth((t - D.beamAt) / 1.8)) : 0;
+  const beamSpark = beamChat ? smooth(Math.min(1, (beamT + 1.4) / 1.2)) * (1 - smooth((beamT - 1.2) / 1.0)) : 0;
   if (params.has('pot')) { D.pot = +params.get('pot'); D.nMug = 1; }
   else if (wantPot && D.nMug >= 1) D.pot = Math.min(1, (D.pot || 0) + dt / 1.6);       // the coffee pot, fetched the same way
   else if (!wantPot) D.pot = Math.max(0, (D.pot || 0) - dt / 1.6);
@@ -1891,7 +1957,7 @@ function direct(t) {
   const clink = toastT < 5 ? Math.max(0, 1 - Math.abs(toastT - 1.6) / 0.35) : 0;
   return { sleep: D.sleep, bdayT, cheer: Math.max(cheer, midnight && D.sleep < 0.5 ? 0.7 * smooth(Math.sin(t * 0.8) * 2) : 0), party, thanks,
            hats: D.hats || bdayT < BDAY_LEN || thanksT < 4 || params.has('bday') || params.has('hats') || nyeEvening || midnight, presentsT, midnight,
-           stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc,
+           stretch, yawn, nomYawn, nomStretch: nomStretchAmt, bMug: D.bMug, nMug: D.nMug, croc: D.croc, beamIn, beamSpark,
            toastTurn, toastRaise, clink, bookOut, bookOpen, reading, page, pageT, doze,
            pot: D.pot || 0, pourBarry, pourNom, holdOut, chat, movieT, tvOn, bowl, scary, watching, jamIn: D.jamIn || 0, jamSet: D.jamSet || 'party', waveN, waveB, waveT, dt };
 }
@@ -2211,6 +2277,7 @@ function pose(t) {
   GHOST.value = costume === 'ghost' ? 1 : 0;
   const captain = costume === 'captain';
   if (captain && !uniformPatched) { patchUniforms(); uniformPatched = true; }
+  if (captain && uniformQueue.length) uniformQueue.shift()();
   UNIFORM.on.value = captain ? 1 : 0;
   { const tg = params.has('tug') ? +params.get('tug') : lastStart(t, TUG_TIMES).since;      // the tug: down sharply, then it settles back
     UNIFORM.tug.value = captain && !params.has('rest') || params.has('tug') ? 0.07 * (tg < 0.25 ? smooth(tg / 0.25) : Math.max(0, 1 - (tg - 0.25) / 0.9)) * (tg < 1.15 ? 1 : 0) : 0; }
@@ -2370,33 +2437,40 @@ function pose(t) {
     });
   } else sparks.forEach(sp => (sp.visible = false));
 
-  // beam transporter effect — sparkles swirl around Nom's arm, Greg fades in on line 1
-  if (fx === 'beam' && W.chat) {
-    const onLine1 = W.chat.line === 1;
-    const fadeIn = onLine1 ? smooth(Math.min(1, W.chat.lineT / 1.8)) : 0;   // Greg fades in over ~1.8s on line 1
-    const sparkAmt = onLine1 ? smooth(Math.min(1, W.chat.lineT * 2)) * (1 - smooth((W.chat.lineT - W.chat.len + 0.6) / 0.4))
-                              : smooth(Math.min(1, W.chat.lineT));            // build during line 0, hold on line 1
-    alien.getWorldPosition(_zp);
-    const cx = _zp.x - 0.18, cy = _zp.y + 0.1, cz = _zp.z + 0.12;
-    beamSparks.forEach((sp, i) => {
-      const seed = sp.userData.seed, phase = seed + t * (1.4 + (i % 3) * 0.3);
-      const r = 0.18 + 0.1 * Math.sin(seed * 7.3);
-      sp.visible = sparkAmt > 0.02;
-      sp.position.set(cx + r * Math.cos(phase), cy + 0.18 * Math.sin(phase * 0.7 + seed), cz + 0.06 * Math.sin(phase * 1.3));
-      const sz = (0.06 + 0.04 * Math.sin(seed * 3.1 + t * 2)) * sparkAmt;
-      sp.scale.set(sz, sz, sz);
-      sp.material.opacity = sparkAmt * (0.5 + 0.5 * Math.sin(seed + t * 3));
-      sp.material.rotation = seed + t;
-    });
-    // fade Greg in — override normal croc visibility during beam
-    croc.visible = fadeIn > 0.01;
-    if (croc.visible) {
-      croc.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) { m.transparent = true; m.opacity = fadeIn; } });
+  // beaming Greg aboard: a shimmer of sparkles over Nom's tummy, and Greg fades in already in its arms
+  const _hug = croc.parent.localToWorld(_zp.set(...CROC_HUG.p)).clone();
+  beamSparks.forEach((sp, i) => {
+    const seed = sp.userData.seed, u = (Math.sin(seed * 12.9898) * 43758.5453) % 1, v = (Math.sin(seed * 78.233) * 24634.6345) % 1;
+    const fall = ((t * 0.35 + Math.abs(v)) % 1);                       // drifting down the beam, then round again
+    const tw = 0.5 + 0.5 * Math.sin(seed + t * 9);                    // twinkle
+    sp.visible = W.beamSpark > 0.02;
+    if (!sp.visible) return;
+    sp.position.set(_hug.x + 0.62 * u, _hug.y + 0.55 - 0.75 * fall, _hug.z + 0.25 + 0.05 * Math.sin(seed));
+    const sz = (0.08 + 0.08 * tw) * W.beamSpark * Math.sin(Math.PI * fall);
+    sp.scale.set(sz, sz, sz);
+    sp.material.opacity = Math.min(1, W.beamSpark * 1.5) * (0.4 + 0.6 * tw);
+    sp.material.rotation = 0.3 * Math.sin(seed + t * 2);
+  });
+  if (W.beamIn > 0 && W.beamIn < 1) {
+    if (!croc.userData.ownMats) {       // Greg's eyes, mouth etc. share materials with Barry and Nom, so he gets his own copies to fade
+      const copies = new Map();
+      const own = (m) => {
+        if (!copies.has(m)) { const c = m.clone(); c.onBeforeCompile = m.onBeforeCompile; c.customProgramCacheKey = m.customProgramCacheKey;
+                              if (c.emissive) c.userData.glow = c.emissive.clone(); copies.set(m, c); }
+        return copies.get(m);
+      };
+      croc.traverse(o => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material); });
+      croc.userData.ownMats = [...copies.values()];
     }
-  } else {
-    beamSparks.forEach(sp => (sp.visible = false));
-    // restore Greg's opacity to solid when beam is done
-    croc.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) { if (m.transparent && m.opacity < 1) { m.opacity = 1; } } });
+    croc.visible = true;
+  }
+  if (croc.userData.ownMats) {
+    const fading = W.beamIn > 0 && W.beamIn < 1;
+    for (const m of croc.userData.ownMats) {
+      if (m.transparent !== fading) { m.transparent = fading; m.needsUpdate = true; }
+      m.opacity = fading ? W.beamIn : 1;
+      if (m.emissive) m.emissive.copy(m.userData.glow).lerp(_beamGlow, fading ? 0.8 * (1 - W.beamIn) : 0);   // a cool shimmer while he materialises
+    }
   }
 
   // eyes
