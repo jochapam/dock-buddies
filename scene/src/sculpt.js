@@ -143,7 +143,7 @@ export function lathe(profile, sx, sz) {
  * Adds per-vertex soft shading ("ao") that darkens creases where parts meet.
  */
 export function sculpt(sdf, bounds, step, armWeight, colorFn = null) {
-  if (BAKED && bakeIndex < Math.min(BAKED.length, BAKE_LIMIT)) return BAKED[bakeIndex++];   // already sculpted and stored inside the app
+  if (BAKED && bakeIndex < Math.min(BAKED.length, BAKE_LIMIT)) { const g = BAKED[bakeIndex++]; g.userData.sdf = sdf; return g; }   // already sculpted and stored inside the app
   if (BAKED) bakeIndex++;               // anything newer than the stored set is sculpted live
   const [[x0, y0, z0], [x1, y1, z1]] = bounds;
   const dims = [Math.ceil((x1 - x0) / step) + 1, Math.ceil((y1 - y0) / step) + 1, Math.ceil((z1 - z0) / step) + 1];
@@ -198,6 +198,7 @@ export function sculpt(sdf, bounds, step, armWeight, colorFn = null) {
   g.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   SCULPTED.push(g);
+  g.userData.sdf = sdf;
   return g;
 }
 
@@ -249,9 +250,12 @@ export function poses(maxAngle, pivot, build, material, parent, count = 9, extra
       for (const a of arms) d = Math.min(d, a(r[0], r[1], r[2]));
       return d;
     };
-    const mesh = new THREE.Mesh(build(armsAt, toRest, k >= count ? e : null), material);
+    let armsUsed = null;
+    const mesh = new THREE.Mesh(build((arms, x, y, z) => armsAt(armsUsed = arms, x, y, z), toRest, k >= count ? e : null), material);
     mesh.visible = k === 0;
-    mesh.userData.toRest = toRest;        // (lets paint-on effects find where an arm point sat at rest)
+    // (for paint-on effects: how far a point is from the arms, and where it sat with the arms at rest)
+    mesh.userData.armDist = (x, y, z) => { if (!armsUsed) mesh.geometry.userData.sdf(x, y, z); return armsAt(armsUsed, x, y, z); };
+    mesh.userData.toRest = toRest;
     parent.add(mesh);
     meshes.push(mesh);
   }

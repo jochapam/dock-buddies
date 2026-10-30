@@ -1323,83 +1323,46 @@ function patchGhostly() {
 // Captain's Day uniforms: a black band across the shoulders and colour below, painted onto the body by height.
 const UNIFORM = { on: { value: 0 }, tug: { value: 0 } };
 let uniformPatched = false;
-// Each arm pose is its own body mesh, so the paint is placed by where each point sat at rest: lifted arms keep
-// their sleeves instead of picking up the shoulder band and chest as they pass through them.
-function restCoords(rest) {
-  // the resting surface's vertices, sorted into a grid of cells for quick nearest-point lookups
-  const H = 0.04, rp = rest.geometry.attributes.position.array, rn = rp.length / 3;
-  rest.geometry.computeBoundingBox(); const lo = rest.geometry.boundingBox.min.clone().subScalar(H);
-  const NX = Math.ceil((rest.geometry.boundingBox.max.x - lo.x) / H) + 2, NY = Math.ceil((rest.geometry.boundingBox.max.y - lo.y) / H) + 2,
-        NZ = Math.ceil((rest.geometry.boundingBox.max.z - lo.z) / H) + 2;
-  const cellOf = (x, y, z) => { const cx = Math.floor((x - lo.x) / H), cy = Math.floor((y - lo.y) / H), cz = Math.floor((z - lo.z) / H);
-    return cx < 0 || cy < 0 || cz < 0 || cx >= NX || cy >= NY || cz >= NZ ? -1 : (cx * NY + cy) * NZ + cz; };
-  const start = new Int32Array(NX * NY * NZ + 1), order = new Int32Array(rn);
-  for (let i = 0; i < rn; i++) start[cellOf(rp[i * 3], rp[i * 3 + 1], rp[i * 3 + 2]) + 1]++;
-  for (let c = 0; c < NX * NY * NZ; c++) start[c + 1] += start[c];
-  const fill = start.slice(0, -1);
-  for (let i = 0; i < rn; i++) order[fill[cellOf(rp[i * 3], rp[i * 3 + 1], rp[i * 3 + 2])]++] = i;
-  const near = (x, y, z) => {   // squared distance to the resting surface (just its vertices, which are close enough), up to H
-    let d = H * H;
-    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
-      const cell = cellOf(x + a * H, y + b * H, z + c * H); if (cell < 0) continue;
-      for (let k = start[cell]; k < start[cell + 1]; k++) {
-        const i = order[k] * 3, dx = rp[i] - x, dy = rp[i + 1] - y, dz = rp[i + 2] - z;
-        d = Math.min(d, dx * dx + dy * dy + dz * dz);
-      }
-    }
-    return d;
-  };
-  return (mesh) => {
-    if (mesh === rest || !mesh.userData.toRest || mesh.geometry.attributes.uniRest) return;
-    const pp = mesh.geometry.attributes.position, n = pp.count, out = new Float32Array(n * 4), back = new Float32Array(n * 3);
-    let score = new Float32Array(n);   // > 0: a moved arm point, which lies on the resting surface once put back
-    for (let i = 0; i < n; i++) {
-      const x = pp.getX(i), y = pp.getY(i), z = pp.getZ(i), r = mesh.userData.toRest(x, y, z), da = near(x, y, z);
-      back.set(r, i * 3); score[i] = da < 1e-6 ? -0.03 : Math.sqrt(da) - Math.sqrt(near(r[0], r[1], r[2]));   // (unmoved: no need to look further)
-    }
-    // a few rounds of averaging with neighbours, so stray points don't flip and leave speckles
-    const idx = mesh.geometry.index.array, first = new Int32Array(n + 1), nb = new Int32Array(idx.length * 2);
-    for (let f = 0; f < idx.length; f++) first[idx[f] + 1] += 2;
-    for (let i = 0; i < n; i++) first[i + 1] += first[i];
-    const put = first.slice(0, -1);
-    for (let f = 0; f < idx.length; f += 3) for (let e = 0; e < 3; e++) { const v = idx[f + e]; nb[put[v]++] = idx[f + (e + 1) % 3]; nb[put[v]++] = idx[f + (e + 2) % 3]; }
-    for (let round = 0; round < 8; round++) {
-      const next = new Float32Array(n);
-      for (let i = 0; i < n; i++) { let sum = score[i]; for (let k = first[i]; k < first[i + 1]; k++) sum += score[nb[k]]; next[i] = sum / (1 + first[i + 1] - first[i]); }
-      score = next;
-    }
-    for (let i = 0; i < n; i++)
-      out.set(score[i] > 0 ? [back[i * 3], back[i * 3 + 1], back[i * 3 + 2], 0] : [pp.getX(i), pp.getY(i), pp.getZ(i), 1], i * 4);
-    mesh.geometry.setAttribute('uniRest', new THREE.BufferAttribute(out, 4));
-  };
+// Each arm pose is its own body mesh, so painting by height would put the shoulder band and chest on arms that
+// pass through them. Instead the arms (found from the sculpt's own arm shapes) get plain sleeves, with the paws
+// (placed by where they sit at rest) left bare. xyz: the resting position; w: 0 on the arm, 1 elsewhere.
+function sleeveCoords(mesh) {
+  if (mesh.geometry.attributes.uniRest) return;
+  const pp = mesh.geometry.attributes.position, n = pp.count, out = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const x = pp.getX(i), y = pp.getY(i), z = pp.getZ(i);
+    const arm = 1 - smooth01((mesh.userData.armDist(x, y, z) - 0.02) / 0.04);   // soft across the crease where the arm meets the body
+    out.set(arm > 0 ? [...mesh.userData.toRest(x, y, z), 1 - arm] : [x, y, z, 1], i * 4);
+  }
+  mesh.geometry.setAttribute('uniRest', new THREE.BufferAttribute(out, 4));
 }
 const uniformQueue = [];   // pose meshes still to be given their resting coordinates, one a frame (drinking poses first)
 function patchUniforms() {
-  const waving = new Set([...bearWave.meshes, ...nomWave.meshes]);   // (a paw held up to wave looks best bare, as before)
-  for (const [root, rest, first] of [[bearBody, bearPoses.meshes[0], bearPoses.meshes], [alienBody, alienPoses.meshes[0], alienPoses.meshes]]) {
-    const coords = restCoords(rest);
-    for (const o of new Set([...first, ...root.children])) if (o.isMesh && o.userData.toRest && !waving.has(o)) uniformQueue.push(() => coords(o));
-  }
-  const kit = [[bearBody, new THREE.Vector4(1.52, 1.76, 0.42, 0), new THREE.Color(0x80141b)],     // Barry: command red
-               [alienBody, new THREE.Vector4(0.73, 0.8, 0.3, 1), new THREE.Color(0x1f6f9e)]];      // Nom: science blue
-  for (const [root, cut, col] of kit) {
+  for (const [root, first] of [[bearBody, bearPoses.meshes], [alienBody, alienPoses.meshes]])
+    for (const o of new Set([...first, ...root.children])) if (o.isMesh && o.userData.armDist) uniformQueue.push(() => sleeveCoords(o));
+  const kit = [[bearBody, new THREE.Vector4(1.52, 1.76, 0.42, 0), new THREE.Color(0x80141b), new THREE.Vector4(0.56, 0.99, 1.08, 0.3)],     // Barry: command red
+               [alienBody, new THREE.Vector4(0.73, 0.8, 0.3, 1), new THREE.Color(0x1f6f9e), new THREE.Vector4(0.33, 0.46, 0.43, 0.17)]];  // Nom: science blue
+  for (const [root, cut, col, paw] of kit) {
     const walk = (o) => { if (o === bearMug || o === alienMug || o === croc) return;
       if (o.isMesh) for (const m of [].concat(o.material)) if (m.userData.plush && !m.userData.uniformed) {
         m.userData.uniformed = true;
         const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
         m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
-          Object.assign(sh.uniforms, { uUni: UNIFORM.on, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col } });
-          sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvUni = uniRest.w < 0.5 ? uniRest.xyz : position;');   // (w is 1 where there's no uniRest)
-          sh.fragmentShader = 'uniform float uUni, uTug; uniform vec4 uCut; uniform vec3 uCol; varying vec3 vUni;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+          Object.assign(sh.uniforms, { uUni: UNIFORM.on, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col }, uPaw: { value: paw } });
+          sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni, vRest; varying float vArm;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+            '#include <begin_vertex>\nvUni = position; vRest = uniRest.xyz; vArm = 1.0 - uniRest.w;');   // (w is 1 where there's no uniRest)
+          sh.fragmentShader = 'uniform float uUni, uTug; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; varying vec3 vUni, vRest; varying float vArm;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
             { float y = vUni.y + uTug;                                                   // a tug pulls the whole top down a touch
               float collar = uCut.y - 0.06 * smoothstep(0.0, 0.5, vUni.z) * (1.0 - abs(vUni.x));   // dips a little at the front
               bool feet = uCut.w < 0.5
                 ? (length((vec3(abs(vUni.x), vUni.y, vUni.z) - vec3(0.58, 0.36, 0.62)) / vec3(0.54, 0.46, 0.66)) < 1.05    // his legs and feet stay furry
                    || (abs(vUni.x) > 0.2 && abs(vUni.x) < 0.62 && vUni.y > 0.7 && vUni.y < 1.25 && vUni.z > 0.98))                                    // and so do his paws
                 : (vUni.y < 0.45 && vUni.z > 0.28);
-              if (uUni > 0.5 && y < collar && y > uCut.z && !feet) {
+              bool arm = vArm > 0.5;                                                        // the arms: all sleeve, down to the paw
+              if (arm) feet = length(vec3(abs(vRest.x), vRest.y, vRest.z) - uPaw.xyz) < uPaw.w;
+              if (uUni > 0.5 && (y < collar || arm) && (y > uCut.z || arm) && !feet) {
                 float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-                vec3 c = y > uCut.x ? vec3(0.035, 0.032, 0.045) : uCol;   // a black band across the shoulders, colour below
+                vec3 c = y > uCut.x && !arm ? vec3(0.035, 0.032, 0.045) : uCol;   // a black band across the shoulders, colour below
                 diffuseColor.rgb = c * (0.85 + 0.2 * gl); } }`);
         };
         m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-uniform' + (root === bearBody ? 'B' : 'N');
