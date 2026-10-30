@@ -1,5 +1,5 @@
 """Sculpt both characters once in a headless browser, then write buddies_baked.html with the meshes stored inside."""
-import base64, gzip, pathlib, re
+import base64, gzip, pathlib, re, subprocess
 from playwright.sync_api import sync_playwright
 src = pathlib.Path('buddies.html')
 with sync_playwright() as p:
@@ -9,6 +9,7 @@ with sync_playwright() as p:
     pg.goto(src.resolve().as_uri() + '?preview', timeout=900000)
     data = base64.b64decode(pg.evaluate("() => window.exportBaked()"))
     b.close()
+data = subprocess.run(['node', 'simplify_baked.mjs'], input=data, stdout=subprocess.PIPE, check=True).stdout   # a quarter of the triangles, looks the same
 gz = gzip.compress(data, 9)
 print(f'raw {len(data)/1e6:.1f} MB -> gzipped {len(gz)/1e6:.1f} MB')
 html = src.read_text()

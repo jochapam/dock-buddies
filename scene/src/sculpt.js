@@ -25,7 +25,7 @@ function parseBaked(u8) {
     for (let i = 0; i < nV * 3; i++) { nrm[i] = dv.getInt16(o, true) / 32767; o += 2; }
     for (let i = 0; i < nV; i++) ao[i] = dv.getUint8(o++) / 255;
     if (col) for (let i = 0; i < nV * 3; i++) col[i] = dv.getUint8(o++) / 255;
-    const idx = new Uint32Array(nI); let prev = 0;
+    const idx = nV < 65536 ? new Uint16Array(nI) : new Uint32Array(nI); let prev = 0;
     for (let i = 0; i < nI; i++) { prev += dv.getInt32(o, true); idx[i] = prev; o += 4; }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));

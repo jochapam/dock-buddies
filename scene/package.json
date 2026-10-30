@@ -13,6 +13,7 @@
     "esbuild": "^0.28.2",
     "fflate": "^0.8.3",
     "isosurface": "^1.0.0",
+    "meshoptimizer": "0.22.0",
     "three": "^0.169.0"
   }
 }

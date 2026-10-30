@@ -1,7 +1,7 @@
 #!/bin/bash
 # Rebuilds ../buddies.html from src/ after changing the scene (animation, director, activities…).
 # Uses the already-sculpted meshes in baked-meshes.b64, so it takes seconds.
-# If you change the characters' SHAPES (sculpt code), re-bake first:  node build.mjs && python3 bake_export.py
+# If you change the characters' SHAPES (sculpt code), re-bake first:  node build.mjs && python3 bake_export.py (it also thins the meshes to a quarter, see simplify_baked.mjs)
 # then save the new blob:  python3 -c "import re;open('baked-meshes.b64','w').write(re.search(r'__BAKED_GZ=\"([^\"]+)\"',open('buddies_baked.html').read()).group(1))"
 set -e
 cd "$(dirname "$0")"
