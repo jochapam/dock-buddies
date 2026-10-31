@@ -36,13 +36,15 @@ function resize() {
   if (window.__WEB) {
     // the web app fills a whole screen: show the dock window's view (half-height t, aspect DOCK) with room above
     // for the chat bubbles (the Mac app draws those above its window), and on a tall phone, more space around it
-    const t = Math.tan(THREE.MathUtils.degToRad(7)), DOCK = 460 / 340, a = w / h;
-    const H = Math.max(2.6 * t, 2 * t * DOCK / a);             // visible height, in view-tangent units
+    // The page's controls along the bottom (window.__WEB_BOTTOM px) get a strip of their own: they're framed in the space above.
+    const t = Math.tan(THREE.MathUtils.degToRad(7)), DOCK = 460 / 340, ui = Math.min(window.__WEB_BOTTOM || 0, h * 0.3), ha = h - ui, a = w / ha;
+    const H = Math.max(2.6 * t, 2 * t * DOCK / a);             // visible height above the controls, in view-tangent units
     const extra = H - 2 * t, below = Math.max(0, extra - 0.6 * t) * 0.4, above = extra - below;
-    const half = t + above;                                      // a symmetric frustum tall enough, cropped to its upper part
+    const top = t + above, bottom = t + below + ui * H / ha;      // from the view's centre line up / down to the screen edges
+    const half = Math.max(top, bottom), full = h * 2 * half / (top + bottom);   // a symmetric frustum, cropped to the screen
     camera.fov = 2 * Math.atan(half) * 180 / Math.PI;
-    camera.aspect = w / (h * 2 * half / H);
-    camera.setViewOffset(w, h * 2 * half / H, 0, 0, w, h);
+    camera.aspect = w / full;
+    camera.setViewOffset(w, full, 0, (half - top) / (2 * half) * full, w, h);
   }
   camera.updateProjectionMatrix();
 }

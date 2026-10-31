@@ -98,6 +98,8 @@
 <script>
   // Fetch the meshes as a file (with progress), then start the scene and the controls.
   window.__WEB = true;   // (the scene frames itself for a full screen)
+  // keep the chat bar's strip clear (measured, so it includes the home-indicator area): the scene frames itself above it
+  Object.defineProperty(window, '__WEB_BOTTOM', { get: () => innerHeight - document.getElementById('talk').getBoundingClientRect().top + 8 });
   (async () => {
     const bar = document.querySelector('#loading i');
     try {

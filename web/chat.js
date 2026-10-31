@@ -65,7 +65,7 @@ async function ask(client, who, userName) {
     system: PERSONAS[who],
     messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\nYour turn, ${NAME[who]}.` }],
   });
-  if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Let's talk about something else, eh?" : 'Hmm! New topic?', face: 'normal', activity: 'none' };
+  if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Let's talk about something else, huh?" : 'Hmm! New topic?', face: 'normal', activity: 'none' };
   const text = res.content.find(b => b.type === 'text');
   return JSON.parse(text ? text.text : '{}');
 }
@@ -108,7 +108,7 @@ export async function talk(msg, { apiKey, userName }) {
     const key = e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError;
     const limit = e instanceof Anthropic.RateLimitError;
     window.sayLines(key ? [line('B', "That key doesn't seem to work.", 'normal'), line('N', 'Check it in the ☕ menu?', 'curious')]
-      : limit ? [line('N', 'Too much talking! Phew.', 'groan'), line('B', 'Give us a minute, mate.', 'sleepy')]
+      : limit ? [line('N', 'Too much talking! Phew.', 'groan'), line('B', 'Give us a minute, pal.', 'sleepy')]
       : [line('B', 'Line\'s a bit crackly…', 'normal'), line('N', 'Try again in a sec?', 'curious')]);
   } finally {
     busy = false;

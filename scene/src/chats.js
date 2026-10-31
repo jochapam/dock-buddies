@@ -134,7 +134,7 @@ export const CHATS = [
                            ['N', 'PERFECT.', 'happy', 'giggle']] },
   { when: festive, lines: [['B', 'Why does Santa have a garden?', 'normal', 'curious'], ['N', 'Why?', 'normal', 'curious'],
                            ['B', 'He loves to hoe, hoe, hoe!', 'happy', 'normal'], ['N', 'Hahaha!', 'happy', 'giggle']] },
-  { when: festive, lines: [['B', 'What do snowmen eat for brekkie?', 'normal', 'curious'], ['N', 'What?', 'normal', 'curious'],
+  { when: festive, lines: [['B', 'What do snowmen eat for breakfast?', 'normal', 'curious'], ['N', 'What?', 'normal', 'curious'],
                            ['B', 'Frosted flakes.', 'happy', 'normal'], ['N', 'Hehehe!', 'happy', 'giggle']] },
   { when: festive, lines: [['N', 'Look at the tree lights!', 'normal', 'wonder'], ['B', 'Twinkly.', 'happy', 'happy']] },
   { when: xmasDay, lines: [['N', 'Merry Christmas, Barry!', 'normal', 'giggle'], ['B', 'Merry Christmas, Nom!', 'happy', 'happy']] },
