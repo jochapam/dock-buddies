@@ -2674,8 +2674,9 @@ function pose(t) {
   const glance = !params.has('rest') && !mood && lastStart(t, GLANCES).since < 1.9;
   const sipping = us > 0.5;
   const mmm = params.get('expr') === 'content' || (!mood && afterSip && sinceSip < 4.8);   // eyes stay happily closed just after a sip
-  const happyEyes = nz < 0.5 && (W.jamIn > 0.5 || (nFace === 'happy' && !nomTalking) || W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
-  const sleepyEyes = nz > 0.5 || mood === 'sleepy' || (blink && !happyEyes);
+  const upAndAbout = F.stand > 0.05 && nz < 0.5;   // eyes open while he's up on his feet (turning round for Greg)
+  const happyEyes = nz < 0.5 && !upAndAbout && (W.jamIn > 0.5 || (nFace === 'happy' && !nomTalking) || W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
+  const sleepyEyes = nz > 0.5 || (mood === 'sleepy' && !upAndAbout) || (blink && !happyEyes);
   const wide = mood === 'curious' ? 1 + 0.15 * ease : 1;
   alienEyes.forEach(({ white, pupil, s, sleepy, happy }) => {
     white.visible = pupil.visible = !happyEyes && !sleepyEyes;
