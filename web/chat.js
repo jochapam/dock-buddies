@@ -88,7 +88,7 @@ async function ask(client, who, userName) {
     system: PERSONAS[who],
     messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\nYour turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
   });
-  if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Let's talk about something else, huh?" : 'Hmm! New topic?', face: 'normal', activity: 'none' };
+  if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Barry thinks it's time for pancakes." : 'Hmm! New topic?', face: 'normal', activity: 'none' };
   const text = res.content.find(b => b.type === 'text');
   return JSON.parse(text ? text.text : '{}');
 }
@@ -110,7 +110,7 @@ export async function talk(msg, { apiKey, userName }) {
   busy = true;
   try {
     if (!apiKey) {
-      window.sayLines([line('B', "We'd love a chat!", 'happy'), line('N', 'Add a chat key in the ☕ menu!', 'curious')]);
+      window.sayLines([line('B', 'Barry would like chat.', 'happy'), line('N', 'Add a chat key in the ☕ menu!', 'curious')]);
       return;
     }
     history.push({ who: userName || 'You', text: msg }); history.splice(0, Math.max(0, history.length - KEEP));
@@ -130,9 +130,9 @@ export async function talk(msg, { apiKey, userName }) {
   } catch (e) {
     const key = e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError;
     const limit = e instanceof Anthropic.RateLimitError;
-    window.sayLines(key ? [line('B', "That key doesn't seem to work.", 'normal'), line('N', 'Check it in the ☕ menu?', 'curious')]
-      : limit ? [line('N', 'Too much talking! Phew.', 'groan'), line('B', 'Give us a minute, pal.', 'sleepy')]
-      : [line('B', 'Line\'s a bit crackly…', 'normal'), line('N', 'Try again in a sec?', 'curious')]);
+    window.sayLines(key ? [line('B', 'Barry thinks key is wrong.', 'normal'), line('N', 'Check it in the ☕ menu?', 'curious')]
+      : limit ? [line('N', 'Too much talking! Phew.', 'groan'), line('B', 'Barry needs minute.', 'sleepy')]
+      : [line('B', 'Barry can\'t hear. Line is crackly.', 'normal'), line('N', 'Try again in a sec?', 'curious')]);
   } finally {
     busy = false;
   }
