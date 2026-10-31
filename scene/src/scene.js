@@ -1044,8 +1044,10 @@ const gregWitch = new THREE.Group(); croc.add(gregWitch); gregWitch.visible = fa
 // …and a different costume each day of Halloween week (vampires on the night itself)
 const toon = (color, extra) => new THREE.MeshToonMaterial(Object.assign({ color, gradientMap: TOON_BANDS.cel }, extra || {}));
 const COSTUME_DAYS = ['vampire', 'pirate', 'vampire', 'witch', 'mummy', 'traveller', 'captain', 'vampire'];   // 24-31 Oct
+let costumeAsked = null;   // { name (or null to take it off), until }: dressing up when asked in the chat, for an hour
 function costumeToday(n) {
   if (params.has('costume')) return params.get('costume');
+  if (costumeAsked && performance.now() < costumeAsked.until) return costumeAsked.name;
   if (params.has('halloween')) return 'vampire';
   return n.getMonth() === 9 && n.getDate() >= 24 ? COSTUME_DAYS[n.getDate() - 24] : null;
 }
@@ -1718,7 +1720,7 @@ window.pat = (x, y) => {
   if (!hit) return false;
   let who = 'B';
   for (let a = hit.object; a; a = a.parent) { if (a === croc) { who = 'G'; break; } if (a === alien) { who = 'N'; break; } if (a === bear) break; }
-  D.pat = { who, at: performance.now() / 1000 }; lastActivityMs = performance.now();
+  D.pat = { who, at: performance.now() / 1000 }; lastActivityMs = performance.now(); D.napUntil = 0;
   return true;
 };
 // Weather, from the app (Open-Meteo): WMO weather code, temperature in °C, daytime or not
@@ -1735,7 +1737,7 @@ function today() {
   return n;
 }
 const isFestive = (n) => n.getMonth() === 11 || (n.getMonth() === 0 && n.getDate() <= 6);
-window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'presents') { D.giftScarf = D.giftHat = false; } if (name === 'chat') D.chatNow = true; if (name === 'jam') D.demoJam = performance.now() + 40000; };
+window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'wave') D.pendingWave = true; if (name === 'nap') D.napUntil = performance.now() + 4 * 60000; if (name === 'presents') { D.giftScarf = D.giftHat = false; } if (name === 'chat') D.chatNow = true; if (name === 'jam') D.demoJam = performance.now() + 40000; };
 let lastActivityMs = performance.now();
 // Talking with you (the web app's chat): lines like the scripted chats' [who, words, Barry's face, Nom's face], played as
 // soon as they're awake, even in the middle of an activity; lines that arrive while a talk is playing are added to its end.
@@ -1751,13 +1753,16 @@ window.sceneState = () => {
     hot: isHot(), cold: isCold(), rain: isRainy(), activity: D.act, asleep: D.sleep > 0.5 };
 };
 window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
-window.nudge = () => { lastActivityMs = performance.now(); };   // someone's here (the web app calls this when it's opened)
+window.nudge = () => { lastActivityMs = performance.now(); D.napUntil = 0; };
+/** dress up (any costume, any day) for an hour; null takes it off, even in Halloween week */
+window.wearCostume = (name) => { costumeAsked = { name: COSTUME[name] ? name : null, until: performance.now() + 60 * 60000 }; };   // someone's here (the web app calls this when it's opened)
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
 window.setBirthdayDay = (on) => { D.hats = !!on; };
 function wantsSleep() {
   if (MUSIC.on) return false;
   if (params.has('sleep')) return true;
   if (params.has('preview') || params.has('rest')) return false;
+  if (D.napUntil > performance.now()) return true;           // a nap, when asked for one
   const idleMin = (performance.now() - Math.max(lastActivityMs, mouseMovedAt)) / 60000;
   const h = new Date().getHours() + new Date().getMinutes() / 60;
   const night = h >= 22 || h < 6.5;
@@ -1893,6 +1898,7 @@ function direct(t) {
   if (near && idle && !D.wavedThisVisit && t - D.nearSince > 0.25 && t - D.lastWave > 15) {
     D.waveStart = t; D.lastWave = t; D.barryJoin = false; D.wavedThisVisit = true;
   }
+  if (D.pendingWave && D.sleep < 0.05) { D.waveStart = t; D.lastWave = t; D.barryJoin = true; D.wavedThisVisit = true; D.pendingWave = false; }   // asked to wave: both do
   let waveT = params.has('wave') ? +params.get('wave') : (D.waveStart === null ? Infinity : t - D.waveStart);
   if (waveT > 1.2 && waveT < 1.3 && near) D.barryJoin = true;
   const waveN = waveT < 3.2 ? smooth(Math.min(waveT / 0.35, (3.2 - waveT) / 0.35)) : 0;
@@ -1931,7 +1937,7 @@ function direct(t) {
                                  fx: D.chat.conv.fx, line: D.chat.conv.lines.indexOf(ln) }; break; }
         ct -= len;
       }
-      if (!chat && !params.has('chat') && !params.has('surprise')) { if (D.chat.conv.then) D.pendingAct = D.chat.conv.then; D.chat = null; }
+      if (!chat && !params.has('chat') && !params.has('surprise')) { if (D.chat.conv.then) window.doActivity(D.chat.conv.then); D.chat = null; }
     }
   }
 

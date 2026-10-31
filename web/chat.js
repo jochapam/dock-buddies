@@ -3,10 +3,11 @@
 // bubbles with matching faces (window.sayLines), and they can start an activity when asked.
 // The API key is the user's own, kept only in this browser's storage; it is sent only to Anthropic.
 import Anthropic from '@anthropic-ai/sdk';
-import { PERSONAS, FACES, ACTIVITIES } from '../scene/src/personas.js';
+import { PERSONAS, FACES, ACTIVITIES, COSTUMES } from '../scene/src/personas.js';
 
 const MODEL = 'claude-haiku-5-5';
 const NAME = { B: 'Barry', N: 'Nom' };
+// (each reply also says which activity to start and whether to dress up: see REQUESTS in personas.js)
 const history = [];            // [{ who: 'You' | 'Barry' | 'Nom', text }], the last few lines only (keeps every call small)
 const KEEP = 14;
 
@@ -16,8 +17,9 @@ const schema = (who) => ({
     say: { type: 'string', description: 'Your line, or "" to stay quiet' },
     face: { type: 'string', enum: FACES[who] },
     activity: { type: 'string', enum: ACTIVITIES },
+    costume: { type: 'string', enum: COSTUMES },
   },
-  required: ['say', 'face', 'activity'],
+  required: ['say', 'face', 'activity', 'costume'],
   additionalProperties: false,
 });
 
@@ -25,7 +27,8 @@ function describeScene(s, userName) {
   const when = s.hour < 5 ? 'the middle of the night' : s.hour < 12 ? 'morning' : s.hour < 17 ? 'afternoon' : s.hour < 21 ? 'evening' : 'late at night';
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const bits = [`It's ${days[s.weekday]} ${when} (${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}), ${s.date}/${s.month}.`];
-  if (s.costume) bits.push(`It's Halloween week: today you're both dressed as ${s.costume === 'captain' ? 'starship captains' : s.costume + 's'}.`);
+  if (s.month === 10 && s.date >= 24) bits.push("It's Halloween week.");
+  if (s.costume) bits.push(`You're both dressed up as ${s.costume === 'captain' ? 'starship captains' : s.costume + 's'}.`);
   if (s.festive) bits.push("It's the festive season: Santa hats and a little tree.");
   if (s.weather) bits.push(`Weather where the user is: ${s.weather.temp}°C${s.rain ? ', raining' : ''}${s.hot ? ' (hot: sunglasses and iced coffee)' : ''}${s.cold ? ' (cold: scarves on)' : ''}.`);
   if (s.activity) bits.push(`Right now you're in the middle of: ${{ toast: 'a toast', croc: 'a Greg cuddle', story: "Barry's story time", refill: 'a coffee top-up', movie: 'movie night', presents: 'opening presents' }[s.activity] || s.activity}.`);
@@ -95,6 +98,7 @@ export async function talk(msg, { apiKey, userName }) {
       const r = await ask(client, who, userName);
       const say = (r.say || '').trim();
       if (r.activity && r.activity !== 'none' && !then) then = r.activity;
+      if (r.costume && r.costume !== 'none') window.wearCostume(r.costume === 'off' ? null : r.costume);   // poof!
       if (!say) continue;
       history.push({ who: NAME[who], text: say });
       window.sayLines(bubbles(say).map(t => line(who, t, FACES[who].includes(r.face) ? r.face : 'normal')));
