@@ -29,8 +29,16 @@ function describeScene(s, userName) {
   if (s.festive) bits.push("It's the festive season: Santa hats and a little tree.");
   if (s.weather) bits.push(`Weather where the user is: ${s.weather.temp}°C${s.rain ? ', raining' : ''}${s.hot ? ' (hot: sunglasses and iced coffee)' : ''}${s.cold ? ' (cold: scarves on)' : ''}.`);
   if (s.activity) bits.push(`Right now you're in the middle of: ${{ toast: 'a toast', croc: 'a Greg cuddle', story: "Barry's story time", refill: 'a coffee top-up', movie: 'movie night', presents: 'opening presents' }[s.activity] || s.activity}.`);
+  const mood = nomOfTheDay(s);
+  if (mood) bits.push(`Nom seems to be in a ${mood} mood today (he might drift in and out of it).`);
   if (userName) bits.push(`The user likes to be called ${userName}.`);
   return bits.join(' ');
+}
+
+// a different side of Nom some days (the same all day, so it doesn't flip every message); plain Nom on the others
+function nomOfTheDay(s) {
+  const moods = [null, null, null, 'Business Nom', 'Goth Nom', 'Nurse Nom'];
+  return moods[((s.month * 37 + s.date) * 7919) % moods.length];
 }
 
 // short bubbles: split a reply into sentence-sized lines (the scene shows one bubble per line)
