@@ -724,7 +724,9 @@ const nomStrum = makeNomStrum(), bearTap = makeBearTap();   // playing in the ba
 // at the hip. How much a point follows its leg comes from the sculpt's own shapes: all leg towards the paw, all body away
 // from it, and soft where the leg melts in (so it bends like a plush, without a crease).
 const NOM_HIPS = [[-0.31, 0.32, 0.08], [0.31, 0.32, 0.08]];
-const NOM_STAND = 1.25;   // how far the legs swing down under him when he stands (radians)
+const NOM_STAND = +(params.get('legs') || 1.25);   // how far the legs swing down under him when he stands (radians; test ?legs=)
+// how far he rises so his paws stay on the floor: the bottom of the paw, swung about the hip, ends up this far below it
+const NOM_RISE = (-0.33 * Math.cos(NOM_STAND) - 0.38 * Math.sin(NOM_STAND) + 0.33) * -0.85 + 0.0;
 const nomRoot = new THREE.Bone(), nomLegBones = NOM_HIPS.map(p => { const b = new THREE.Bone(); b.position.set(...p); nomRoot.add(b); return b; });
 alienBody.add(nomRoot);
 const nomSkeleton = new THREE.Skeleton([nomRoot, ...nomLegBones]);
@@ -2474,7 +2476,7 @@ function pose(t) {
   const hopping = false;   // the little hop is switched off
   const F = gregFetch(params.has('greg') ? 0 : W.croc);
   alien.position.y = (hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0) + 0.16 * W.pourBarry;   // up on tiptoes to reach Barry's mug
-  alien.position.y += 0.13 * F.stand + 0.09 * F.hop;              // up on his feet (and hopping round) to fetch Greg
+  alien.position.y += NOM_RISE * F.stand + 0.09 * F.hop;          // up on his feet (and hopping round) to fetch Greg
   if (nomSkinQueue.length) { if (F.stand > 0) while (nomSkinQueue.length) nomSkinQueue.shift()(); else nomSkinQueue.shift()(); }   // (legs ready before he stands)
   nomLegBones.forEach(b => (b.rotation.x = NOM_STAND * F.stand));  // legs swing down under him
   { // the clean standing shape for this height: blended between the two nearest corrections
