@@ -731,10 +731,18 @@ const nomSkeleton = new THREE.Skeleton([nomRoot, ...nomLegBones]);
 // Bending the sitting sculpt's legs down drags the surface where they melt into his body (a notch between the legs, an edge
 // above them). So each point also gets a correction: where it belongs on a standing Nom (legs swung down, blended into the
 // body like the sculpt does it), brought back through the bones so that bones + correction land exactly there.
-const _sc = Math.cos(NOM_STAND), _ss = Math.sin(NOM_STAND), [, HY, HZ] = NOM_HIPS[0];
-function nomStanding(x, y, z) {        // Nom's body with both legs swung down (arms and ears don't matter down here)
+// One correction for each of a few heights on the way up (blended between as he rises), each matching the bones at that height.
+const NOM_STAND_STEPS = [1 / 3, 2 / 3, 1];
+const [, HY, HZ] = NOM_HIPS[0];
+let _sc = 1, _ss = 0;                  // the legs' swing for the correction being worked out
+// standing, his cushion-flat bottom (with its rim) shows, so it rounds off underneath, a little more the higher he gets
+const nomRoundBottom = S.lathe([[0, 0.0], [0.25, 0.02], [0.42, 0.07], [0.55, 0.15], [0.63, 0.26], [0.68, 0.4], [0.7, 0.58], [0.69, 0.8], [0.647, 1.106],
+  [0.55, 1.292], [0.4, 1.439], [0.233, 1.526], [0.071, 1.563], [0, 1.566]], 1, 0.5);
+let _round = 1;
+function nomStanding(x, y, z) {        // Nom's body with both legs swung down that far (arms and ears don't matter down here)
   const ry = y - HY, rz = z - HZ, ly = HY + ry * _sc + rz * _ss, lz = HZ - ry * _ss + rz * _sc;   // back to where the leg was
-  return S.smin(nomParts.body(x, y, z), Math.min(nomParts.feet[0](x, ly, lz), nomParts.feet[1](x, ly, lz)), 0.09);
+  const b = nomParts.body(x, y, z), body = b + (nomRoundBottom(x, y, z) - b) * _round;
+  return S.smin(body, Math.min(nomParts.feet[0](x, ly, lz), nomParts.feet[1](x, ly, lz)), 0.09);
 }
 function standFix(x, y, z, w, nx, ny, nz, dP, dN, v, f) {
   // where the bones alone take this point (linear blend between staying put and the leg's rotation about the hip)
@@ -752,7 +760,7 @@ function standFix(x, y, z, w, nx, ny, nz, dP, dN, v, f) {
   }
   // only a gentle nudge onto a surface it actually reached, faded out (never cut off, which would leave a step between
   // neighbouring points) where it moves a long way or doesn't settle, and towards the edges of the region it covers
-  f *= smooth01((0.14 - Math.hypot(px - sx, py - sy, pz - sz)) / 0.05) * smooth01((0.015 - Math.abs(d)) / 0.008);
+  f *= smooth01((0.2 - Math.hypot(px - sx, py - sy, pz - sz)) / 0.06) * smooth01((0.015 - Math.abs(d)) / 0.008);
   if (f <= 0) return;
   // and back through the bones: the blend is A = (1-w) I + w R (about the hip, in y/z only), so rest = A^-1 (target - hip) + hip
   const a = 1 - w + w * _sc, b = w * _ss, det = a * a + b * b, ty = py - HY, tz = pz - HZ;
@@ -772,8 +780,8 @@ const nomSkinQueue = [];
     for (let v = 0; v < n; v++) wt[v * 4] = 1;
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(new Uint16Array(n * 4), 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wt, 4));
-    g.morphAttributes.position = [new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3)];
-    g.morphAttributes.normal = [new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3)];
+    g.morphAttributes.position = NOM_STAND_STEPS.map(() => new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
+    g.morphAttributes.normal = NOM_STAND_STEPS.map(() => new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
     g.morphTargetsRelative = true;
     const sm = new THREE.SkinnedMesh(g, m.material);   // (picks up the correction as morph target 0)
     Object.assign(sm, { visible: m.visible, castShadow: m.castShadow, receiveShadow: m.receiveShadow, frustumCulled: false, userData: m.userData });
@@ -786,7 +794,7 @@ const nomSkinQueue = [];
 }
 function skinNomLegs(m) {
   const g = m.geometry, P = g.attributes.position, N = g.attributes.normal, n = P.count;
-  const idx = g.attributes.skinIndex.array, wt = g.attributes.skinWeight.array, dP = g.morphAttributes.position[0].array, dN = g.morphAttributes.normal[0].array;
+  const idx = g.attributes.skinIndex.array, wt = g.attributes.skinWeight.array;
   for (let v = 0; v < n; v++) {
     const x = P.getX(v), y = P.getY(v), z = P.getZ(v), side = x < 0 ? 0 : 1;
     const arm = m.userData.armDist(x, y, z);
@@ -795,10 +803,13 @@ function skinNomLegs(m) {
     idx[v * 4] = 0; idx[v * 4 + 1] = 1 + side; wt[v * 4] = 1 - w; wt[v * 4 + 1] = w;
     // the correction for standing: where this point should be on a properly blended standing Nom, undone back through the bones
     const f = smooth01((0.62 - y) / 0.12) * smooth01((arm - 0.1) / 0.08);   // the lower body only, away from the arms
-    if (f > 0) standFix(x, y, z, w, N.getX(v), N.getY(v), N.getZ(v), dP, dN, v, f);
+    if (f > 0) NOM_STAND_STEPS.forEach((st, k) => {
+      _sc = Math.cos(NOM_STAND * st); _ss = Math.sin(NOM_STAND * st); _round = st;
+      standFix(x, y, z, w, N.getX(v), N.getY(v), N.getZ(v), g.morphAttributes.position[k].array, g.morphAttributes.normal[k].array, v, f);
+    });
   }
   g.attributes.skinIndex.needsUpdate = g.attributes.skinWeight.needsUpdate = true;
-  g.morphAttributes.position[0].needsUpdate = g.morphAttributes.normal[0].needsUpdate = true;
+  g.morphAttributes.position.forEach(a => (a.needsUpdate = true)); g.morphAttributes.normal.forEach(a => (a.needsUpdate = true));
 }
 nomStrum.meshes.forEach(m => (m.visible = false)); bearTap.meshes.forEach(m => (m.visible = false));
 
@@ -2466,7 +2477,12 @@ function pose(t) {
   alien.position.y += 0.13 * F.stand + 0.09 * F.hop;              // up on his feet (and hopping round) to fetch Greg
   if (nomSkinQueue.length) { if (F.stand > 0) while (nomSkinQueue.length) nomSkinQueue.shift()(); else nomSkinQueue.shift()(); }   // (legs ready before he stands)
   nomLegBones.forEach(b => (b.rotation.x = NOM_STAND * F.stand));  // legs swing down under him
-  for (const ps of [alienPoses, nomStretch, nomWave, nomStrum]) ps.meshes.forEach(m => { if (m.visible) m.morphTargetInfluences[0] = smooth01((F.stand - 0.55) / 0.45); });   // with the clean standing shape (worked out for a full stand, so only near the top)
+  { // the clean standing shape for this height: blended between the two nearest corrections
+    const inf = NOM_STAND_STEPS.map((st, k) => { const lo = k ? NOM_STAND_STEPS[k - 1] : 0, hi = NOM_STAND_STEPS[k + 1];
+      return F.stand <= st ? Math.max(0, (F.stand - lo) / (st - lo)) : hi === undefined ? 1 : Math.max(0, (hi - F.stand) / (hi - st)); });
+    if (params.has('nostandfix')) inf.fill(0);   // (test stills: bones only)
+    for (const ps of [alienPoses, nomStretch, nomWave, nomStrum]) ps.meshes.forEach(m => { if (m.visible) inf.forEach((v, k) => (m.morphTargetInfluences[k] = v)); });
+  }
   if (mood === 'giggle') alien.position.y += Math.abs(Math.sin(moodT * 16)) * 0.035 * ease;   // little giggly bounce
   const fx = W.chat && W.chat.fx;
   if (fx === 'hiccup' && /hic/.test(W.chat.text) && W.chat.lineT < 0.35) alien.position.y += 0.09 * Math.sin(Math.PI * W.chat.lineT / 0.35);   // hic!
