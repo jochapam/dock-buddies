@@ -127,7 +127,7 @@ const FORTUNES = [ 'a diner he opened by accident', 'a hat business that took of
   'an umbrella shop in a very rainy year', 'a toy he invented while bored'];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 function variety(who) {
-  if (who !== 'B') return Math.random() < 0.01 ? 'If it fits, this is a rare good moment for Nom to mention SoHo (or his planet).' : '';
+  if (who !== 'B') return Math.random() < 0.01 ? 'If it fits, this is a rare good moment for Nom to mention where he might be from (New York? space? Space New York?).' : '';
   // Barry's stories are rare: at most one offered a day (remembered on this device)
   const today = new Date().toDateString();
   let last = null; try { last = localStorage.getItem('buddies.storyDay'); } catch (e) {}
