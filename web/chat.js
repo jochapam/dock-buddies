@@ -44,6 +44,18 @@ function nomOfTheDay(s) {
   return moods[((s.month * 37 + s.date) * 7919) % moods.length];
 }
 
+// a safety net for the model slipping into talking about itself by name ("Barry remembers…" -> "I remember…")
+const BE = { is: 'am', was: 'was', has: 'have', does: 'do', "doesn't": "don't", "isn't": "am not", "wasn't": "wasn't", "hasn't": "haven't" };
+function firstPerson(who, text) {
+  const name = NAME[who], start = `(^|[.!?…]\\s+)${name}`;
+  const toI = (verb) => BE[verb] || (/s$/.test(verb) && !/ss$/.test(verb)
+    ? verb.replace(/ies$/, 'y').replace(/(ss|sh|ch|x|z|o)es$/, '$1').replace(/([^s])s$/, '$1') : verb);
+  return text
+    .replace(new RegExp(`${start}'s (got|been)\\b`, 'g'), "$1I've $2")              // "Barry's got…" -> "I've got…"
+    .replace(new RegExp(`${start}'s\\b`, 'g'), '$1My')                              // "Barry's mug" -> "My mug"
+    .replace(new RegExp(`${start} ([a-z']+)\\b`, 'g'), (m, pre, verb) => `${pre}I ${toI(verb)}`);
+}
+
 // short bubbles: split a reply into sentence-sized lines (the scene shows one bubble per line)
 function bubbles(text) {
   const parts = text.replace(/\s+/g, ' ').trim().match(/[^.!?…]+[.!?…]*["')]?\s*/g) || [text];
@@ -96,7 +108,7 @@ export async function talk(msg, { apiKey, userName }) {
     let then = null;
     for (const who of [first, second]) {
       const r = await ask(client, who, userName);
-      const say = (r.say || '').trim();
+      const say = firstPerson(who, (r.say || '').trim());
       if (r.activity && r.activity !== 'none' && !then) then = r.activity;
       if (r.costume && r.costume !== 'none') window.wearCostume(r.costume === 'off' ? null : r.costume);   // poof!
       if (!say) continue;
