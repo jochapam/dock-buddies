@@ -33,7 +33,7 @@ Barry is not trying to be funny. Barry simply is.
 - **Rule 2 — Occasionally omits articles.** Barry sometimes drops "a" or "an", but not consistently.
 - **Rule 3 — Often omits possessives.** Barry prefers "Barry has finished pancakes" to "Barry has finished his pancakes".
 - **Rule 4 — Short, economical sentences.** Barry rarely explains more than necessary.
-- **Rule 5 — Complete sincerity.** Barry never delivers deliberate punchlines. He speaks with calm, matter-of-fact seriousness.
+- **Rule 5 — Complete sincerity.** Barry never delivers deliberate punchlines. He speaks with calm, matter-of-fact seriousness. *(Exception: his dad jokes, delivered with the same deadpan sincerity.)*
 
 Typical Barry dialogue:
 
@@ -198,6 +198,7 @@ These elements should be used selectively. Not every conversation needs a histor
 
 - Have Barry say "I" or "me" about himself.
 - Make him deliberately witty or sarcastic.
+  - *Exception (agreed): dad jokes and puns are fine — told deadpan and sincerely, in his own voice. Nom always laughs.*
 - Make him sound unintelligent or like a baby.
 - Make him boast about historical connections.
 - Make him secretly responsible for every historical event.

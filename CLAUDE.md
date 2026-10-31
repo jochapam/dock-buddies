@@ -1,6 +1,6 @@
 # Dock Buddies: notes for Claude
 
-- Characters: **Barry** (brown plush bear) and **Nom** (pink alien, not a bunny). Barry's character bible is `docs/barry.md` (third person, sincere, never deliberately witty; history, Vegas, Bernard the Norwegian mastiff, pancakes): follow it for anything he says, scripted or chat. Soft cel look, no fur. Don't widen the bear beyond 1.08.
+- Characters: **Barry** (brown plush bear) and **Nom** (pink alien, not a bunny). Barry's character bible is `docs/barry.md` (third person, sincere, never sarcastic, but dad jokes told deadpan are fine; history, Vegas, Bernard the Norwegian mastiff, pancakes): follow it for anything he says, scripted or chat. Soft cel look, no fur. Don't widen the bear beyond 1.08.
 - Show work on the characters as stills, not videos, unless asked.
 - Scene changes: edit `scene/src/scene.js`, run `scene/build-scene.sh` (reuses `scene/baked-meshes.b64`). Check with stills via `scene/dir_test.py` (Playwright + SwiftShader; query params like `?preview`, `?sleep=1`, `?bday=8`, `?expr=`, `?mouse=x,y`).
 - Some state builds up frame by frame (mugs going down, Captain's Day sleeves), so a single `renderAt(t)` straight after load can show things that never appear in the app: call `__pose(t)` ~45 times at 1/30 s steps first.
