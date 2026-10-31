@@ -512,7 +512,7 @@ const alien = new THREE.Group();
 alien.position.set(-1.64, 0, 0.75);   // a little gap so it doesn't press into the bear's arm
 alien.scale.setScalar(0.85);   // about half his height, ears reaching his eyes
 scene.add(alien);
-groundShadow(1.8, 1.3, alien).position.z = 0.15;
+const nomBlob = groundShadow(1.8, 1.3, alien); nomBlob.position.z = 0.15;
 const alienBody = new THREE.Group();
 alien.add(alienBody);
 // One soft body: tube ears, feet and arms all melt smoothly into it.
@@ -2557,6 +2557,11 @@ function pose(t) {
   alienMug.rotation.set((MUG_TILT + ALIEN_ARM_LIFT * us - (0.4 + MUG_TILT) * smooth((us - 0.6) / 0.4)), 0, 0);
   nomFloor.position.set(...lerp3(NOM_FLOOR, NOM_SIDE, smooth(Math.max(W.croc * 3, W.jamSet === 'band' ? W.jamIn * 3 : 0, D.crocSide || 0))));
   nomFloor.position.applyAxisAngle(_yAxis, -F.turn); nomFloor.rotation.y = -F.turn;   // (stays where it is while Nom turns round)
+  { // his soft shadow stays on the floor when he gets up or hops (it's attached to him), a little smaller and fainter the higher he is
+    const up = Math.max(0, alien.position.y);
+    nomBlob.position.y = (0.005 - up) / alien.scale.y;
+    nomBlob.scale.setScalar(1 / (1 + 1.5 * up)); nomBlob.material.opacity = 1 / (1 + 4 * up);
+  }
   D.crocSide = (W.croc > 0 || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
   // the coffee pot, held in Nom's paws (brought out from behind, like Greg); Nom leans and shuffles
   // so the spout is right over the mug it's filling
