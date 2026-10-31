@@ -504,6 +504,7 @@ const MUG_TILT = 0.22;   // tipped a little towards us so you can see the coffee
 bearMug.position.set(...BA([0, 1.04, 1.24]));
 
 // =====================================================================
+const EAR = { value: new THREE.Vector3() };   // Nom's ears lagging behind his head (set every frame in pose)
 // Alien (pink, about half the bear's size: round bean body, paddle ears,
 // big flat eyes looking inward, a downward-pointing mouth with two yellow teeth)
 // =====================================================================
@@ -561,6 +562,13 @@ const NOM_STRETCH = [[0.5, 0.2], [1.0, 0.45], [1.4, 0.65], [1.7, 0.8]].map(([lif
     return S.sculpt(sdf, stretch ? [[-1.2, -0.15, -0.6], [1.2, 2.55, 0.85]] : [[-0.95, -0.15, -0.6], [0.95, 2.55, 0.85]], 0.02, () => 0);
   };
   const alienMat = plushMaterial(C.alien, 0, true);
+  // floppy ears: the top of each ear bends with EAR (x: sideways, y: splaying outwards), more towards the tip
+  { const prev = alienMat.onBeforeCompile, prevKey = alienMat.customProgramCacheKey;
+    alienMat.onBeforeCompile = (sh, r) => { prev && prev.call(alienMat, sh, r); sh.uniforms.uEar = EAR;
+      sh.vertexShader = 'uniform vec3 uEar;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        { float k = clamp((transformed.y - 1.5) / 0.75, 0.0, 1.0); k *= k;
+          transformed.x += (uEar.x + sign(transformed.x) * uEar.y) * k; transformed.z += uEar.z * k; }`); };
+    alienMat.customProgramCacheKey = () => (prevKey ? prevKey.call(alienMat) : '') + '-ears'; }
   var alienPoses = S.poses(ALIEN_ARM_LIFT, ALI_PIVOT, alienBuild, alienMat, alienBody);
   var makeNomStretch = () => S.poses(0, ALI_PIVOT, alienBuild, alienMat, alienBody, 0, NOM_STRETCH);
   var makeNomWave = () => S.poses(0, ALI_PIVOT, alienBuild, alienMat, alienBody, 0, NOM_WAVE);
@@ -1652,7 +1660,18 @@ function lookAtMouse(white, pupil) {
   const m = 0.12 * Math.min(1, d / 120);              // pupils centre when the pointer is right in front of the eye
   placePupil(pupil, dx / d * m, dy / d * m);
 }
-const blinking = (t, period, offset) => !params.has('rest') && ((t + offset) % period) < 0.16;
+// blinks: irregular gaps, and now and then a quick double blink, so they never blink like clockwork
+function blinkSchedule(seed, minGap, maxGap) {
+  let r = seed; const rand = () => (r = (r * 16807) % 2147483647) / 2147483647;
+  const starts = []; let t = rand() * maxGap;
+  for (let i = 0; i < 6000; i++) { starts.push(t); if (rand() < 0.15) { t += 0.32; starts.push(t); } t += minGap + rand() * (maxGap - minGap); }
+  return { starts, span: t };
+}
+const BLINKS_B = blinkSchedule(4242, 2.8, 7.5), BLINKS_N = blinkSchedule(777, 2.2, 6);   // Nom blinks a bit more often
+const blinking = (t, sched) => !params.has('rest') && lastStart(t, sched).since < 0.15;
+// glances: Nom looks over at Barry now and then (every third time Barry looks back), and Barry turns to Nom now and then
+const GLANCES = sipSchedule(8642, 6, 8, 20), BARRY_LOOKS = sipSchedule(1357, 15, 25, 50);
+const bump = (s, len) => s >= 0 && s < len ? smooth(Math.min(s / 0.3, (len - s) / 0.3)) : 0;
 
 
 // =====================================================================
@@ -2073,6 +2092,11 @@ function pose(t) {
   bearBody.rotation.z = 0.045 * sway - 0.025 * zz + 0.05 * W.toastTurn + 0.03 * Math.sin(t * 5) * W.stretch * (1 - W.stretch);
   bearBody.rotation.z += 0.07 * booSway(W, 'B', t);   // swaying like a ghost while he moans
   if (!params.has('solo')) bear.rotation.y = -0.2 - 0.14 * W.toastTurn + 0.3 * W.watching;    // turns towards Nom for a toast, or to the TV
+  if (!params.has('solo') && !params.has('rest')) {           // now and then he looks over at Nom (and back when Nom looks at him)
+    const g = lastStart(t, GLANCES), own = lastStart(t, BARRY_LOOKS).since;
+    const look = Math.max(g.i % 3 === 0 ? bump(g.since - 0.4, 1.8) : 0, bump(own, 2.4));
+    bear.rotation.y -= 0.13 * look * (1 - zz) * (1 - W.watching) * (1 - W.stretch) * (1 - W.bookOut);
+  }
   pivotAbout(bearBody, BEAR_BEND_AT);
   bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
   bearPoses.show(bs);
@@ -2163,7 +2187,7 @@ function pose(t) {
   const nodding = (hour >= 22 || hour < 2) && !params.has('preview') && !params.has('rest') && ls.i % 3 === 1 && ls.since > 1.0 && ls.since < 2.5;
   if (nodding) bearBody.rotation.x += 0.14 * smooth((ls.since - 1.0) / 0.5);   // dozing off mid-sip…
   if ((hour >= 22 || hour < 2) && ls.i % 3 === 1 && ls.since > 2.5 && ls.since < 2.9) bearBody.rotation.z += 0.05 * Math.sin((ls.since - 2.5) * 40);   // …and jolting awake
-  const sleepy = !happy && (zz > 0.5 || nodding || bFace === 'sleepy' || blinking(t, 4.7, 1));
+  const sleepy = !happy && (zz > 0.5 || nodding || bFace === 'sleepy' || blinking(t, BLINKS_B));
   bearEyes.forEach((e, i) => {
     e.visible = !happy && !sleepy;
     // his eyes follow your pointer too (a small shift on his face)
@@ -2357,6 +2381,22 @@ function pose(t) {
   alienBody.scale.set(1 / Math.sqrt(nomTall * nSquash), nomTall * nSquash, 1);
   if (D.alienX === undefined) D.alienX = alien.position.x;
   alien.position.x = D.alienX + 0.06 * nz;
+  // his soft ears lag behind his head and wobble back: a little spring for each way they bend, pushed by how his head accelerates
+  { const E = D.ears || (D.ears = { x: 0, v: 0, s: 0, sv: 0, hx: null }), dt = Math.min(W.dt || 0, 0.05);
+    const hx = alien.position.x + 1.6 * Math.sin(alienBody.rotation.z), hy = alien.position.y;
+    if (E.hx === null || params.has('rest')) Object.assign(E, { hx, hy, vx: 0, vy: 0, x: 0, v: 0, s: 0, sv: 0 });
+    else if (dt > 0) {
+      const vx = (hx - E.hx) / dt, vy = (hy - E.hy) / dt, ax = (vx - E.vx) / dt, ay = (vy - E.vy) / dt;
+      Object.assign(E, { hx, hy, vx, vy });
+      const w = 2 * Math.PI * 2.0, c = 2 * 0.18 * w, n = 4, h = dt / n;   // soft: about two wobbles a second, settling in about a second
+      for (let i = 0; i < n; i++) {
+        E.v += (-w * w * E.x - c * E.v - 4.5 * ax) * h; E.x += E.v * h;
+        E.sv += (-w * w * E.s - c * E.sv + 4.5 * ay) * h; E.s += E.sv * h;
+      }
+      E.x = Math.max(-0.4, Math.min(0.4, E.x)); E.s = Math.max(-0.4, Math.min(0.4, E.s));
+    }
+    EAR.value.set(0.12 * Math.tanh(E.x / 0.12), 0.1 * Math.tanh(E.s / 0.1), 0); }   // never more than a soft flop
+  if (params.has('ears')) { const [ex, es] = params.get('ears').split(',').map(Number); EAR.value.set(ex, es, 0); }   // (test stills: ?ears=sideways,splay)
   // bending down for the mug, and turning round to fetch Greg from behind (or put him back)
   const reach = Math.sin(Math.PI * smooth(Math.max(W.croc, W.pot)));
   alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach;
@@ -2475,8 +2515,8 @@ function pose(t) {
   }
 
   // eyes
-  const blink = blinking(t, 3.9, 0.5);
-  const gp = t % 13, glance = !params.has('rest') && !mood && gp > 5 && gp < 7;
+  const blink = blinking(t, BLINKS_N);
+  const glance = !params.has('rest') && !mood && lastStart(t, GLANCES).since < 1.9;
   const sipping = us > 0.5;
   const mmm = params.get('expr') === 'content' || (!mood && afterSip && sinceSip < 4.8);   // eyes stay happily closed just after a sip
   const happyEyes = nz < 0.5 && (W.jamIn > 0.5 || (nFace === 'happy' && !nomTalking) || W.waveN > 0.3 || W.pourBarry > 0.5 || (sipping && W.cheer < 0.5) || mmm || mood === 'giggle' || cuddle || W.nomYawn > 0.3 || W.clink > 0.2);
