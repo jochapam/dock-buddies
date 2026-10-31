@@ -67,6 +67,21 @@ function firstPerson(who, text) {
   return t.join('');
 }
 
+// and the other way round for Barry, who always talks about himself as "Barry": "I think" -> "Barry thinks",
+// "I'm" -> "Barry is", "I've" -> "Barry has", "my pancakes" -> "Barry's pancakes", "me" -> "Barry"
+const MODAL = new Set(['can', 'could', 'will', 'would', 'should', 'might', 'must', 'may', 'shall', 'did', 'had', 'was', "can't", "won't", "wouldn't", "couldn't", "shouldn't", "didn't", "wasn't", "hadn't"]);
+const THIRD = { am: 'is', have: 'has', do: 'does', go: 'goes', "don't": "doesn't", "haven't": "hasn't", "aren't": "isn't", were: 'was', "weren't": "wasn't" };
+const third = (v) => THIRD[v] || (MODAL.has(v) ? v : /(s|sh|ch|x|z|o)$/.test(v) ? v + 'es' : /[^aeiou]y$/.test(v) ? v.slice(0, -1) + 'ies' : v + 's');
+function thirdPerson(text) {
+  return text
+    .replace(/\bI'm\b/g, 'Barry is').replace(/\bI've\b/g, 'Barry has').replace(/\bI'll\b/g, 'Barry will').replace(/\bI'd\b/g, 'Barry would')
+    .replace(/\bI (really |just |also |still |never |always |once |often )?([a-z']+)\b/g, (m, adv, v) => `Barry ${adv || ''}${adv ? third(v) : third(v)}`)
+    .replace(/\bI\b/g, 'Barry')
+    .replace(/\bmine\b/g, "Barry's").replace(/\b(me|myself)\b/g, 'Barry')
+    // "my": dropped when Barry is already in the sentence ("Barry has finished pancakes"), otherwise "Barry's"
+    .split(/([.!?…]\s+)/).map(sen => sen.replace(/\b([Mm])y (\w)/g, (m, c, w, at) => (/Barry/.test(sen.slice(0, at)) ? w : "Barry's " + w))).join('');
+}
+
 // short bubbles: split a reply into sentence-sized lines (the scene shows one bubble per line)
 function bubbles(text) {
   const parts = text.replace(/\s+/g, ' ').trim().match(/[^.!?…]+[.!?…]*["')]?\s*/g) || [text];
@@ -86,7 +101,7 @@ async function ask(client, who, userName) {
     thinking: { type: 'disabled' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: schema(who) } },
     system: PERSONAS[who],
-    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\n${variety(who)}\n\nYour turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
+    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\n${variety(who)}${who === 'B' ? '\n\n' : ''}Your turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
   });
   if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Barry thinks it's time for pancakes." : 'Hmm! New topic?', face: 'normal', activity: 'none' };
   const text = res.content.find(b => b.type === 'text');
@@ -112,15 +127,18 @@ const FORTUNES = ['a pancake restaurant he opened by accident', 'a hat business 
   'an umbrella shop in a very rainy year', 'a toy he invented while bored'];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 function variety(who) {
-  const r = Math.random();
-  if (who === 'B') {
-    if (r < 0.2) return `If it fits naturally (and only then), Barry might mention he was around for ${pick(HISTORY)}: briefly, the Barry way, without explaining it all.`;
-    if (r < 0.28) return `If it fits naturally, Barry might mention ${pick(FORTUNES)}. (It was lost in Vegas.)`;
-    if (r < 0.36) return 'Barry is thinking about pancakes or a nap, if that fits.';
-    return 'No history, Vegas or Bernard this time unless the user asks about them: just answer as Barry.';
+  if (who !== 'B') return '';
+  // Barry's stories are rare: at most one offered a day (remembered on this device)
+  const today = new Date().toDateString();
+  let last = null; try { last = localStorage.getItem('buddies.storyDay'); } catch (e) {}
+  if (last !== today && Math.random() < 0.25) {
+    try { localStorage.setItem('buddies.storyDay', today); } catch (e) {}
+    return Math.random() < 0.7
+      ? `Today's one story, if it fits naturally: Barry might mention he was around for ${pick(HISTORY)}. Briefly, the Barry way.`
+      : `Today's one story, if it fits naturally: Barry might mention ${pick(FORTUNES)} (lost it all in Vegas).`;
   }
-  if (r < 0.12) return 'If it fits, this is a good moment to mention SoHo or your planet.';
-  return "Don't mention where you're from this time unless the user asks.";
+  return Math.random() < 0.15 ? 'Barry is thinking about pancakes or a nap, if that fits. No stories about his past.'
+    : 'No stories about Barry\'s past this time (unless the user asks): just answer as Barry.';
 }
 
 // who should answer first: whoever was named, Nom for space and Greg things, otherwise mostly Barry
@@ -149,7 +167,7 @@ export async function talk(msg, { apiKey, userName }) {
     let then = null;
     for (const who of [first, second]) {
       const r = await ask(client, who, userName);
-      const say = who === 'N' ? firstPerson(who, (r.say || '').trim()) : (r.say || '').trim();   // (Barry talks about himself as "Barry")
+      const say = who === 'N' ? firstPerson(who, (r.say || '').trim()) : thirdPerson((r.say || '').trim());   // (Nom says "I", Barry says "Barry")
       if (r.activity && r.activity !== 'none' && !then) then = r.activity;
       if (r.costume && r.costume !== 'none') window.wearCostume(r.costume === 'off' ? null : r.costume);   // poof!
       if (!say) continue;
