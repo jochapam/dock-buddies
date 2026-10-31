@@ -535,6 +535,7 @@ const NOM_STRETCH = [[0.5, 0.2], [1.0, 0.45], [1.4, 0.65], [1.7, 0.8]].map(([lif
     const paw = S.ellipsoid([s * 0.35, 0.21, 0.46], [0.27, 0.22, 0.17]);
     return (x, y, z) => S.smin(leg(x, y, z), paw(x, y, z), 0.07);
   });
+  var nomParts = { body, feet };   // (for the leg bones: which parts of each sculpt are leg)
   // Soft arms that curl gradually round its sides (no elbow), sunk about half-way into the body,
   // ending in round paws that hold the mug.
   const ARM_END = [0.33, 0.46, 0.43];
@@ -717,6 +718,36 @@ nomStretch.meshes.forEach(m => (m.visible = false));
 const nomWave = makeNomWave(), bearWave = makeBearWave();   // waving hello (sculpted last)
 nomWave.meshes.forEach(m => (m.visible = false)); bearWave.meshes.forEach(m => (m.visible = false));
 const nomStrum = makeNomStrum(), bearTap = makeBearTap();   // playing in the band (sculpted last)
+
+// ---------- Nom's legs: a little skeleton, so he can get up on his feet ----------
+// All of Nom's sculpts (sipping, stretch, wave, strum) share one skeleton: a root bone for everything, and a bone for each leg
+// at the hip. How much a point follows its leg comes from the sculpt's own shapes: all leg towards the paw, all body away
+// from it, and soft where the leg melts in (so it bends like a plush, without a crease).
+const NOM_HIPS = [[-0.31, 0.32, 0.08], [0.31, 0.32, 0.08]];
+const nomRoot = new THREE.Bone(), nomLegBones = NOM_HIPS.map(p => { const b = new THREE.Bone(); b.position.set(...p); nomRoot.add(b); return b; });
+alienBody.add(nomRoot);
+const nomSkeleton = new THREE.Skeleton([nomRoot, ...nomLegBones]);
+{
+  alienBody.updateMatrixWorld(true);
+  for (const poses of [alienPoses, nomStretch, nomWave, nomStrum]) poses.meshes.forEach((m, i) => {
+    const g = m.geometry, P = g.attributes.position, n = P.count;
+    const idx = new Uint16Array(n * 4), wt = new Float32Array(n * 4);
+    for (let v = 0; v < n; v++) {
+      const x = P.getX(v), y = P.getY(v), z = P.getZ(v), side = x < 0 ? 0 : 1;
+      const leg = nomParts.feet[side](x, y, z), other = Math.min(nomParts.body(x, y, z), m.userData.armDist(x, y, z));
+      const w = smooth01((other - leg + 0.03) / 0.15);
+      idx[v * 4] = 0; idx[v * 4 + 1] = 1 + side; wt[v * 4] = 1 - w; wt[v * 4 + 1] = w;
+    }
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wt, 4));
+    const sm = new THREE.SkinnedMesh(g, m.material);
+    Object.assign(sm, { visible: m.visible, castShadow: m.castShadow, receiveShadow: m.receiveShadow, frustumCulled: false, userData: m.userData });
+    sm.position.copy(m.position); sm.quaternion.copy(m.quaternion); sm.scale.copy(m.scale);
+    m.children.slice().forEach(c => sm.add(c));
+    m.parent.add(sm); m.parent.remove(m); poses.meshes[i] = sm;
+    sm.updateMatrixWorld(true); sm.bind(nomSkeleton);
+  });
+}
 nomStrum.meshes.forEach(m => (m.visible = false)); bearTap.meshes.forEach(m => (m.visible = false));
 
 // =====================================================================
@@ -1548,7 +1579,25 @@ flip.position.z = 0.022;
 book.visible = false;
 const CROC_HUG = { p: [0.04, 0.46, 0.68], r: [0, -0.4, 0.08] };
 const CROC_SCALE = 0.76;       // across Nom's tummy, resting on its paws
-const CROC_AWAY = { p: [-0.35, 0.2, -0.55], r: [0, 0.3, 0.0] };    // put down behind Nom
+const CROC_HOLD = { p: [0.02, 0.66, 0.6], r: [0, -0.4, 0.08] };   // carried in front of Nom's chest
+const CROC_FLOOR = { p: [0, 0.16, 0.85], r: [0, -0.4, 0.0] };    // lying on the floor where Nom picks him up (in front of Nom, once he's turned round)
+const CROC_FETCH = 3.4;        // seconds to fetch Greg (or put him back)
+const NOM_TURN = -Math.PI;     // Nom turns right round to reach him (he waits directly behind Nom, out of sight)
+// The fetch, as Greg's progress c goes 0 -> 1 (and the same backwards to put him away): Nom gets up on his feet, hops round
+// to face Greg, leans down and picks him up, hops back round carrying him, and plops down for a cuddle.
+function gregFetch(c) {
+  const ph = (a, b) => smooth01((c - a) / (b - a));
+  const turnT = c < 0.5 ? (c - 0.18) / 0.24 : (c - 0.58) / 0.24;      // 0..1 through each turn
+  return {
+    stand: ph(0, 0.16) * (1 - ph(0.84, 1)),                          // up on his feet, and back down
+    turn: NOM_TURN * (ph(0.18, 0.42) - ph(0.58, 0.82)),
+    hop: turnT > 0 && turnT < 1 ? Math.abs(Math.sin(2 * Math.PI * turnT)) : 0,   // two little hops each way
+    grab: c > 0.42 && c < 0.58 ? Math.sin(Math.PI * (c - 0.42) / 0.16) : 0,     // leaning down to Greg
+    held: ph(0.46, 0.54),                                            // 0 on the floor, 1 in his arms
+    sit: ph(0.84, 1),                                                // settling Greg into a cuddle as he sits
+    plop: c > 0.9 ? Math.sin(Math.PI * (c - 0.9) / 0.1) : (c > 0 && c < 0.08 ? Math.sin(Math.PI * c / 0.08) : 0),   // a squash as he lands (or pushes off)
+  };
+}
 
 // a little "clink!" sparkle for toasts
 const sparkTex = (() => {
@@ -1868,8 +1917,8 @@ function direct(t) {
   if (params.has('mug')) D.bMug = D.nMug = +params.get('mug');
   else { D.bMug = step(D.bMug, bearWants); D.nMug = step(D.nMug, nomWants); }
   if (params.has('croc')) { D.nMug = 1; D.croc = +params.get('croc'); }
-  else if (wantCroc && D.nMug >= 1) D.croc = Math.min(1, D.croc + dt / 1.6);       // reaches round and brings Greg out
-  else if (!wantCroc) D.croc = Math.max(0, D.croc - dt / 1.6);                      // and puts him back
+  else if (wantCroc && D.nMug >= 1) D.croc = Math.min(1, D.croc + dt / CROC_FETCH);   // gets up, hops round and brings Greg out
+  else if (!wantCroc) D.croc = Math.max(0, D.croc - dt / CROC_FETCH);                // and puts him back the same way
   if (D.croc === 0 && !beamChat) D.beamAt = null;
   // the sparkles build while Barry speaks and die away as Greg appears; Greg fades in over 1.8 s
   const beamIn = D.beamAt != null ? Math.max(0.001, smooth((t - D.beamAt) / 1.8)) : 0;
@@ -2042,6 +2091,7 @@ const BEAR_BEND = 0.5, BEAR_BEND_AT = new THREE.Vector3(0, 0.05, 0.85);   // Bar
 const NOM_BEND = 0.38, NOM_BEND_AT = new THREE.Vector3(0, 0.02, 0.4);
 const _pv = new THREE.Vector3(), _mq = new THREE.Quaternion(), _aq = new THREE.Quaternion(), _hq = new THREE.Quaternion();
 /** Rotate/scale a body about a point (its feet) instead of its origin. */
+const _yAxis = new THREE.Vector3(0, 1, 0), _gp = new THREE.Vector3(), _gq = new THREE.Quaternion(), _gq2 = new THREE.Quaternion(), _ge = new THREE.Euler(), _gm = new THREE.Matrix4();
 function pivotAbout(obj, p) {
   _pv.copy(p).multiply(obj.scale).applyEuler(obj.rotation);
   obj.position.set(p.x - _pv.x, p.y - _pv.y, p.z - _pv.z);
@@ -2359,7 +2409,10 @@ function pose(t) {
 
   const hp = t % 5;
   const hopping = false;   // the little hop is switched off
+  const F = gregFetch(params.has('greg') ? 0 : W.croc);
   alien.position.y = (hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0) + 0.16 * W.pourBarry;   // up on tiptoes to reach Barry's mug
+  alien.position.y += 0.13 * F.stand + 0.09 * F.hop;              // up on his feet (and hopping round) to fetch Greg
+  nomLegBones.forEach(b => (b.rotation.x = 1.25 * F.stand));      // legs swing down under him
   if (mood === 'giggle') alien.position.y += Math.abs(Math.sin(moodT * 16)) * 0.035 * ease;   // little giggly bounce
   const fx = W.chat && W.chat.fx;
   if (fx === 'hiccup' && /hic/.test(W.chat.text) && W.chat.lineT < 0.35) alien.position.y += 0.09 * Math.sin(Math.PI * W.chat.lineT / 0.35);   // hic!
@@ -2375,9 +2428,9 @@ function pose(t) {
   if (W.waveN > 0) tilt += 0.05 * Math.sin(W.waveT * 12.5) * W.waveN;   // wiggles as it waves
   alienBody.rotation.z = tilt * (1 - nz) - 0.17 * nz;   // asleep: leans over onto Barry
   { const k = booSway(W, 'N', t); alienBody.rotation.z += 0.09 * k; alien.position.y += 0.05 * Math.abs(k); }   // floaty ghost wobble
-  if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn + 0.35 * W.watching;
+  if (!params.has('soloalien')) alien.rotation.y = 0.3 * W.toastTurn + 0.35 * W.watching + F.turn;
   const nomTall = 1 + 0.06 * W.nomYawn;
-  const nSquash = 1 - 0.09 * Math.sin(Math.PI * W.nMug);
+  const nSquash = (1 - 0.09 * Math.sin(Math.PI * W.nMug)) * (1 - 0.07 * F.plop);
   alienBody.scale.set(1 / Math.sqrt(nomTall * nSquash), nomTall * nSquash, 1);
   if (D.alienX === undefined) D.alienX = alien.position.x;
   alien.position.x = D.alienX + 0.06 * nz;
@@ -2398,12 +2451,13 @@ function pose(t) {
     EAR.value.set(0.12 * Math.tanh(E.x / 0.12), 0.1 * Math.tanh(E.s / 0.1), 0); }   // never more than a soft flop
   if (params.has('ears')) { const [ex, es] = params.get('ears').split(',').map(Number); EAR.value.set(ex, es, 0); }   // (test stills: ?ears=sideways,splay)
   // bending down for the mug, and turning round to fetch Greg from behind (or put him back)
-  const reach = Math.sin(Math.PI * smooth(Math.max(W.croc, W.pot)));
-  alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach;
+  const reach = Math.sin(Math.PI * smooth(W.pot));
+  alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach + 0.32 * F.grab;
   if (fx === 'sneeze' && W.chat.line === 0) alienBody.rotation.x -= 0.14 * smooth(W.chat.lineT / W.chat.len);            // ah… ah…
   if (fx === 'sneeze' && W.chat.line === 1) alienBody.rotation.x += 0.2 * Math.exp(-W.chat.lineT * 4) - 0.14 * Math.exp(-W.chat.lineT * 12);   // ACHOO!
   alienBody.rotation.y = -1.25 * reach;
   pivotAbout(alienBody, NOM_BEND_AT);
+  us = Math.max(us, 0.3 * F.grab + 0.12 * F.held * (1 - F.sit));   // arms out to pick Greg up, and round him to carry him
   alienArms.rotation.x = -ALIEN_ARM_LIFT * us;
   alienPoses.show(us);
   if (W.nomStretch > 0.06) {                    // arms up for a big yawn
@@ -2420,6 +2474,7 @@ function pose(t) {
   } else nomStrum.meshes.forEach(m => (m.visible = false));
   alienMug.rotation.set((MUG_TILT + ALIEN_ARM_LIFT * us - (0.4 + MUG_TILT) * smooth((us - 0.6) / 0.4)), 0, 0);
   nomFloor.position.set(...lerp3(NOM_FLOOR, NOM_SIDE, smooth(Math.max(W.croc * 3, W.jamSet === 'band' ? W.jamIn * 3 : 0, D.crocSide || 0))));
+  nomFloor.position.applyAxisAngle(_yAxis, -F.turn); nomFloor.rotation.y = -F.turn;   // (stays where it is while Nom turns round)
   D.crocSide = (W.croc > 0 || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
   // the coffee pot, held in Nom's paws (brought out from behind, like Greg); Nom leans and shuffles
   // so the spout is right over the mug it's filling
@@ -2452,14 +2507,19 @@ function pose(t) {
   }
 
   // Greg: Nom turns round, picks him up from behind and turns back hugging him (and the reverse to put him away)
-  croc.visible = W.croc > 0.001 || params.has('greg');
+  croc.visible = W.croc > 0.42 || params.has('greg');   // (behind Nom, out of sight, until he's turned right round)
   if (croc.visible && !params.has('greg')) {
-    const k = smooth(Math.min(1, W.croc * 2));        // in Nom's arms by half-way, while Nom is turned round
-    croc.position.set(...lerp3(CROC_AWAY.p, CROC_HUG.p, k)); croc.position.y += Math.sin(Math.PI * k) * 0.15;
+    // on the floor he stays put in the room while Nom turns; once picked up he's carried round with Nom,
+    // then settles into the cuddle as Nom sits down
+    _gp.set(...CROC_FLOOR.p).applyAxisAngle(_yAxis, NOM_TURN - F.turn);
+    _gq.setFromEuler(_ge.set(...CROC_FLOOR.r)).premultiply(_gq2.setFromAxisAngle(_yAxis, NOM_TURN - F.turn));
+    alienBody.updateMatrix(); _gp.applyMatrix4(_gm.copy(alienBody.matrix).invert()); _gq.premultiply(_gq2.copy(alienBody.quaternion).invert());
+    const hold = lerp3(CROC_HOLD.p, CROC_HUG.p, F.sit);
+    croc.position.set(_gp.x + (hold[0] - _gp.x) * F.held, _gp.y + (hold[1] - _gp.y) * F.held + 0.12 * Math.sin(Math.PI * F.held), _gp.z + (hold[2] - _gp.z) * F.held);
     croc.position.y += 0.36 * W.scary; croc.position.z += 0.1 * W.scary;   // hiding behind Greg
-    croc.rotation.set(...lerp3(CROC_AWAY.r, CROC_HUG.r, k));
+    croc.quaternion.copy(_gq.slerp(_gq2.setFromEuler(_ge.set(...lerp3(CROC_HOLD.r, CROC_HUG.r, F.sit))), F.held));
     const sq = cuddle ? 1 - 0.05 * Math.max(0, Math.sin(t * 4.4)) : 1;   // a squeeze now and then
-    if (patG) croc.rotation.z += 0.3 * Math.sin(patAge * 15) * Math.exp(-patAge * 2.5);   // Greg wobbles
+    if (patG) croc.rotateZ(0.3 * Math.sin(patAge * 15) * Math.exp(-patAge * 2.5));   // Greg wobbles
     croc.scale.set(CROC_SCALE * sq, CROC_SCALE / sq, CROC_SCALE);
   }
 
