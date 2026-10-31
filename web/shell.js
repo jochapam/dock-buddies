@@ -32,7 +32,7 @@
 
   // the ☕ menu
   const sheet = $('#sheet');
-  const openSheet = () => sheet.classList.add('open'), closeSheet = () => sheet.classList.remove('open');
+  const openSheet = () => sheet.classList.add('open'), closeSheet = () => { saveChat(); document.activeElement && document.activeElement.blur(); sheet.classList.remove('open'); };
   $('#menuBtn').addEventListener('click', () => sheet.classList.contains('open') ? closeSheet() : openSheet());
   sheet.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => { window.nudge(); window.doActivity(b.dataset.act); closeSheet(); }));
 
@@ -50,8 +50,14 @@
   // chatting with them (chat.js): the key and the name stay in this browser's storage
   const talkIn = $('#talkIn'), talkGo = $('#talkGo'), keyIn = $('#apiKey'), nameIn = $('#userName');
   keyIn.value = store.get('apiKey', ''); nameIn.value = store.get('userName', '');
-  keyIn.addEventListener('change', () => store.set('apiKey', keyIn.value.trim()));
-  nameIn.addEventListener('change', () => store.set('userName', nameIn.value.trim()));
+  // saved as you type or paste (iOS only sends 'change' when the field loses focus, which closing the menu doesn't always do)
+  const saveChat = () => {
+    store.set('apiKey', keyIn.value.trim()); store.set('userName', nameIn.value.trim());
+    $('#keyNote').textContent = store.get('apiKey', '') ? 'Key saved on this device ✓' : '';
+  };
+  for (const el of [keyIn, nameIn]) for (const ev of ['input', 'change', 'blur']) el.addEventListener(ev, saveChat);
+  saveChat();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});   // ask the browser to keep it
   $('#talk').addEventListener('submit', async (e) => {
     e.preventDefault();
     const msg = talkIn.value.trim();
