@@ -762,17 +762,17 @@ function standFix(x, y, z, w, nx, ny, nz, dP, dN, v, f) {
   let py = HY + (1 - w) * ry + w * (ry * _sc - rz * _ss), pz = HZ + (1 - w) * rz + w * (ry * _ss + rz * _sc), px = x;
   // slide it onto the standing surface (a few steps along the distance gradient)
   const e = 0.004, sx = px, sy = py, sz = pz; let gx = 0, gy = 0, gz = 0, d = 1;
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 14; i++) {
     d = nomStanding(px, py, pz);
     gx = (nomStanding(px + e, py, pz) - d) / e; gy = (nomStanding(px, py + e, pz) - d) / e; gz = (nomStanding(px, py, pz + e) - d) / e;
     const g2 = gx * gx + gy * gy + gz * gz || 1;
     if (Math.abs(d) < 1e-4) break;
-    const k = Math.min(1, 0.05 / Math.abs(d));                      // small steps, so it can't leap to another surface
+    const k = Math.min(1, 0.04 / Math.abs(d));                      // small steps, so it can't leap to another surface
     px -= k * d * gx / g2; py -= k * d * gy / g2; pz -= k * d * gz / g2;
   }
   // only a gentle nudge onto a surface it actually reached, faded out (never cut off, which would leave a step between
   // neighbouring points) where it moves a long way or doesn't settle, and towards the edges of the region it covers
-  f *= smooth01((0.2 - Math.hypot(px - sx, py - sy, pz - sz)) / 0.06) * smooth01((0.015 - Math.abs(d)) / 0.008);
+  f *= smooth01((0.4 - Math.hypot(px - sx, py - sy, pz - sz)) / 0.1) * smooth01((0.015 - Math.abs(d)) / 0.008);   // (the top of the thigh swings out furthest)
   if (f <= 0) return;
   // and back through the bones: the blend is A = (1-w) I + w R (about the hip, in y/z only), so rest = A^-1 (target - hip) + hip
   const a = 1 - w + w * _sc, b = w * _ss, det = a * a + b * b, ty = py - HY, tz = pz - HZ;
@@ -810,11 +810,13 @@ function skinNomLegs(m) {
   for (let v = 0; v < n; v++) {
     const x = P.getX(v), y = P.getY(v), z = P.getZ(v), side = x < 0 ? 0 : 1;
     const arm = m.userData.armDist(x, y, z);
-    const leg = nomParts.feet[side](x, y, z), other = Math.min(nomParts.body(x, y, z), arm);
-    const w = smooth01((other - leg + 0.03) / 0.15);
+    const leg = nomParts.feet[side](x, y, z);
+    // soft where the leg melts into his body; sharp between leg and arm (his paws rest on top of his feet, and the top of
+    // the foot must go with the foot, or it stays behind as a lump when the leg swings down)
+    const w = smooth01((nomParts.body(x, y, z) - leg + 0.03) / 0.15) * smooth01((arm - leg + 0.02) / 0.05);
     idx[v * 4] = 0; idx[v * 4 + 1] = 1 + side; wt[v * 4] = 1 - w; wt[v * 4 + 1] = w;
     // the correction for standing: where this point should be on a properly blended standing Nom, undone back through the bones
-    const f = smooth01((0.62 - y) / 0.12) * smooth01((arm - 0.1) / 0.08);   // the lower body only, away from the arms
+    const f = smooth01((0.62 - y) / 0.12) * smooth01((arm - 0.03) / 0.05);   // the lower body only, not the arms themselves
     if (f > 0) NOM_STAND_STEPS.forEach((st, k) => {
       _sc = Math.cos(NOM_STAND * st); _ss = Math.sin(NOM_STAND * st); _round = st;
       standFix(x, y, z, w, N.getX(v), N.getY(v), N.getZ(v), g.morphAttributes.position[k].array, g.morphAttributes.normal[k].array, v, f);
