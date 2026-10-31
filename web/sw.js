@@ -2,7 +2,7 @@
 // everything else (versioned with ?v=) comes from the cache. A new VERSION means a new cache.
 const CACHE = 'buddies-%VERSION%';
 const CORE = ['./', 'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png',
-  'meshes.bin?v=%VERSION%', 'scene.js?v=%VERSION%', 'shell.js?v=%VERSION%'];
+  'meshes.bin?v=%VERSION%', 'scene.js?v=%VERSION%', 'chat.js?v=%VERSION%', 'shell.js?v=%VERSION%'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
@@ -10,7 +10,7 @@ self.addEventListener('activate', (e) => {
 });
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return;   // weather and place search go straight to the network
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;   // weather, place search and chat go straight to the network
   if (e.request.mode === 'navigate') {
     e.respondWith(fetch(e.request).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put('./', copy)); return r; })
       .catch(() => caches.match('./')));

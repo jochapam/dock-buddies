@@ -11,9 +11,10 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out + '/icons', { recursive: true });
 
 await build({ entryPoints: ['src/scene.js'], bundle: true, minify: true, format: 'iife', outfile: out + '/scene.js' });
+await build({ entryPoints: ['../web/chat.js'], bundle: true, minify: true, format: 'iife', globalName: 'buddyChat', outfile: out + '/chat.js', nodePaths: [process.cwd() + '/node_modules'] });   // talking with them (+ the Claude SDK)
 writeFileSync(out + '/meshes.bin', Buffer.from(readFileSync('baked-meshes.b64', 'utf8').trim(), 'base64'));   // gzipped, decoded by sculpt.js
 for (const f of ['index.html', 'sw.js', 'shell.js', 'manifest.webmanifest'])
   writeFileSync(`${out}/${f}`, readFileSync('../web/' + f, 'utf8').replaceAll('%VERSION%', version));
 cpSync('../web/icons', out + '/icons', { recursive: true });
 writeFileSync(out + '/.nojekyll', '');
-console.log(`site/ for ${version}:`, ['scene.js', 'meshes.bin'].map(f => `${f} ${(readFileSync(`${out}/${f}`).length / 1e6).toFixed(1)} MB`).join(', '));
+console.log(`site/ for ${version}:`, ['scene.js', 'chat.js', 'meshes.bin'].map(f => `${f} ${(readFileSync(`${out}/${f}`).length / 1e6).toFixed(1)} MB`).join(', '));

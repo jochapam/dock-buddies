@@ -10,7 +10,7 @@
   // fade in once the first frames are drawn
   requestAnimationFrame(() => requestAnimationFrame(() => {
     $('#loading').style.opacity = 0; setTimeout(() => $('#loading').remove(), 700);
-    $('#menuBtn').style.opacity = 1;
+    $('#menuBtn').style.opacity = 1; $('#talk').style.opacity = 1;
   }));
 
   // someone's arrived: they wake up and wave hello (the scene waves when the pointer comes close)
@@ -23,6 +23,7 @@
   const canvas = $('#c');
   canvas.addEventListener('pointerdown', (e) => {
     if (sheet.classList.contains('open')) { closeSheet(); return; }
+    if (document.activeElement === talkIn) { talkIn.blur(); return; }   // first tap just puts the keyboard away
     window.nudge();
     window.pat(e.clientX, innerHeight - e.clientY);
   });
@@ -34,6 +35,31 @@
   const openSheet = () => sheet.classList.add('open'), closeSheet = () => sheet.classList.remove('open');
   $('#menuBtn').addEventListener('click', () => sheet.classList.contains('open') ? closeSheet() : openSheet());
   sheet.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => { window.nudge(); window.doActivity(b.dataset.act); closeSheet(); }));
+
+  // speech bubbles as crisp page text above whoever is talking (the scene says where their head is, as it does for the Mac app)
+  const say = document.createElement('div'); say.className = 'say'; document.body.appendChild(say);
+  window.__sayHandler = { postMessage(m) {
+    if (!m.show) { say.classList.remove('on'); return; }
+    say.textContent = m.text; say.className = 'say ' + m.who;
+    const w = Math.min(240, innerWidth * 0.7), x = Math.max(w / 2 + 10, Math.min(innerWidth - w / 2 - 10, m.x));
+    say.style.left = x + 'px'; say.style.top = (innerHeight - m.y - 14) + 'px';
+    say.style.setProperty('--tail', `calc(50% + ${m.x - x}px)`);
+    requestAnimationFrame(() => say.classList.add('on'));
+  } };
+
+  // chatting with them (chat.js): the key and the name stay in this browser's storage
+  const talkIn = $('#talkIn'), talkGo = $('#talkGo'), keyIn = $('#apiKey'), nameIn = $('#userName');
+  keyIn.value = store.get('apiKey', ''); nameIn.value = store.get('userName', '');
+  keyIn.addEventListener('change', () => store.set('apiKey', keyIn.value.trim()));
+  nameIn.addEventListener('change', () => store.set('userName', nameIn.value.trim()));
+  $('#talk').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = talkIn.value.trim();
+    if (!msg || window.buddyChat.isBusy()) return;
+    talkIn.value = ''; talkGo.disabled = true; window.nudge();
+    try { await window.buddyChat.talk(msg, { apiKey: store.get('apiKey', ''), userName: store.get('userName', '') }); }
+    finally { talkGo.disabled = false; }
+  });
 
   // weather from Open-Meteo, like the Mac app: on by default for Sydney until a place is chosen
   const wx = Object.assign({ on: true, lat: -33.8688, lon: 151.2093, place: 'Sydney' }, store.get('weather', {}));

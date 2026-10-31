@@ -1737,6 +1737,19 @@ function today() {
 const isFestive = (n) => n.getMonth() === 11 || (n.getMonth() === 0 && n.getDate() <= 6);
 window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'presents') { D.giftScarf = D.giftHat = false; } if (name === 'chat') D.chatNow = true; if (name === 'jam') D.demoJam = performance.now() + 40000; };
 let lastActivityMs = performance.now();
+// Talking with you (the web app's chat): lines like the scripted chats' [who, words, Barry's face, Nom's face], played as
+// soon as they're awake, even in the middle of an activity; lines that arrive while a talk is playing are added to its end.
+window.sayLines = (lines, then) => {
+  lastActivityMs = performance.now();
+  D.pendingTalk = D.pendingTalk ? { lines: D.pendingTalk.lines.concat(lines), then: then || D.pendingTalk.then } : { lines, then };
+};
+/** what's going on, for the chat: time, costume, weather and what they're up to */
+window.sceneState = () => {
+  const n = today();
+  return { hour: n.getHours(), minute: n.getMinutes(), weekday: n.getDay(), month: n.getMonth() + 1, date: n.getDate(),
+    costume: costumeToday(n), festive: isFestive(n), weather: WEATHER.known ? { code: WEATHER.code, temp: Math.round(WEATHER.temp), day: WEATHER.day } : null,
+    hot: isHot(), cold: isCold(), rain: isRainy(), activity: D.act, asleep: D.sleep > 0.5 };
+};
 window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
 window.nudge = () => { lastActivityMs = performance.now(); };   // someone's here (the web app calls this when it's opened)
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
@@ -1902,9 +1915,14 @@ function direct(t) {
     D.chat = { conv: pickChat(), start: t }; D.chatNow = false; D.chatDueAt = null;
   }
   if (params.has('chat')) D.chat = { conv: CHATS[+params.get('chat')], start: t - +(params.get('ct') || 0) };
+  if (D.pendingTalk && D.sleep < 0.1) {                          // you said something: their answer comes first
+    if (D.chat && D.chat.conv.talk) { D.chat.conv.lines.push(...D.pendingTalk.lines); D.chat.conv.then = D.pendingTalk.then || D.chat.conv.then; }
+    else D.chat = { conv: { lines: D.pendingTalk.lines.slice(), then: D.pendingTalk.then, talk: true }, start: t };
+    D.pendingTalk = null;
+  }
   let chat = null;
   if (D.chat) {
-    if (act || D.sleep > 0.1) D.chat = null;                     // something else came up
+    if ((act && !D.chat.conv.talk) || D.sleep > 0.1) D.chat = null;   // something else came up
     else {
       let ct = t - D.chat.start;
       for (const ln of D.chat.conv.lines) {
@@ -2103,13 +2121,13 @@ function pose(t) {
     for (const m of [bookL.userData.face.material, bookR.userData.face.material, flipFront.material, flipBack.material]) m.needsUpdate = true;
   }
   // chat bubbles: in the app they're drawn natively above the buddies (crisp text); here as a fallback
-  const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.say;
+  const native = window.__sayHandler || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.say);   // (the web app draws them as page bubbles)
   const lineKey = W.chat && W.chat.text && W.chat.lineT < W.chat.len - 0.25 ? W.chat.who + W.chat.text : null;
   if (native && lineKey !== D.saidKey) {
     D.saidKey = lineKey;
     if (lineKey) {
       bearBody.updateMatrixWorld(true); alienBody.updateMatrixWorld(true); camera.updateMatrixWorld();
-      const head = W.chat.who === 'B' ? bearBody.localToWorld(_eyePos.set(-0.35, 2.7, 0.4)) : alienBody.localToWorld(_eyePos.set(0.1, 1.62, 0.3));
+      const head = W.chat.who === 'B' ? bearBody.localToWorld(_eyePos.set(-0.35, 2.7, 0.4)) : alienBody.localToWorld(_eyePos.set(0.1, window.__WEB ? 2.6 : 1.62, 0.3));   // (web: above his ears, clear of Barry)
       head.project(camera);
       native.postMessage({ show: true, who: W.chat.who, text: W.chat.text,
                            x: (head.x + 1) / 2 * window.innerWidth, y: (head.y + 1) / 2 * window.innerHeight });
