@@ -11,7 +11,8 @@ let BAKED = null, bakeIndex = 0;
 const BAKE_LIMIT = typeof location !== 'undefined' ? (+new URLSearchParams(location.search).get('bakelimit') || Infinity) : Infinity;
 // stored as plain text in <script id="baked" type="text/plain"> (not JavaScript, so the browser doesn't have to parse it)
 const BAKED_B64 = typeof document !== 'undefined' ? (document.getElementById('baked') || {}).textContent || window.__BAKED_GZ : null;
-if (BAKED_B64) {
+if (typeof window !== 'undefined' && window.__BAKED_BIN) BAKED = parseBaked(gunzipSync(window.__BAKED_BIN));   // the web app downloads them as a file
+else if (BAKED_B64) {
   const bin = atob(BAKED_B64), raw = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
   BAKED = parseBaked(gunzipSync(raw));

@@ -6,3 +6,4 @@ scene/buddies_baked.html
 scene/*.png
 !scene/AppIcon_1024.png
 .DS_Store
+site/

@@ -33,6 +33,17 @@ function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
+  if (window.__WEB) {
+    // the web app fills a whole screen: show the dock window's view (half-height t, aspect DOCK) with room above
+    // for the chat bubbles (the Mac app draws those above its window), and on a tall phone, more space around it
+    const t = Math.tan(THREE.MathUtils.degToRad(7)), DOCK = 460 / 340, a = w / h;
+    const H = Math.max(2.6 * t, 2 * t * DOCK / a);             // visible height, in view-tangent units
+    const extra = H - 2 * t, below = Math.max(0, extra - 0.6 * t) * 0.4, above = extra - below;
+    const half = t + above;                                      // a symmetric frustum tall enough, cropped to its upper part
+    camera.fov = 2 * Math.atan(half) * 180 / Math.PI;
+    camera.aspect = w / (h * 2 * half / H);
+    camera.setViewOffset(w, h * 2 * half / H, 0, 0, w, h);
+  }
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -1727,6 +1738,7 @@ const isFestive = (n) => n.getMonth() === 11 || (n.getMonth() === 0 && n.getDate
 window.doActivity = (name) => { if (ACT_LEN[name]) D.pendingAct = name; if (name === 'presents') { D.giftScarf = D.giftHat = false; } if (name === 'chat') D.chatNow = true; if (name === 'jam') D.demoJam = performance.now() + 40000; };
 let lastActivityMs = performance.now();
 window.playBirthday = () => { D.pendingBday = true; lastActivityMs = performance.now(); };   // hats for the party; all day only on the birthday itself
+window.nudge = () => { lastActivityMs = performance.now(); };   // someone's here (the web app calls this when it's opened)
 window.birthdayThanks = () => { D.pendingThanks = true; lastActivityMs = performance.now(); };
 window.setBirthdayDay = (on) => { D.hats = !!on; };
 function wantsSleep() {
