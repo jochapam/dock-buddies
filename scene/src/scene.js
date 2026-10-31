@@ -725,11 +725,21 @@ const nomStrum = makeNomStrum(), bearTap = makeBearTap();   // playing in the ba
 // from it, and soft where the leg melts in (so it bends like a plush, without a crease).
 const NOM_HIPS = [[-0.31, 0.32, 0.08], [0.31, 0.32, 0.08]];
 const NOM_STAND = +(params.get('legs') || 1.25);   // how far the legs swing down under him when he stands (radians; test ?legs=)
-// how far he rises so his paws stay on the floor: the bottom of the paw, swung about the hip, ends up this far below it
-const NOM_RISE = (-0.33 * Math.cos(NOM_STAND) - 0.38 * Math.sin(NOM_STAND) + 0.33) * -0.85 + 0.0;
 const nomRoot = new THREE.Bone(), nomLegBones = NOM_HIPS.map(p => { const b = new THREE.Bone(); b.position.set(...p); nomRoot.add(b); return b; });
 alienBody.add(nomRoot);
 const nomSkeleton = new THREE.Skeleton([nomRoot, ...nomLegBones]);
+// How far he rises when he stands, so his paws sit exactly where they did: the lowest point of a leg swung down, against the
+// lowest point at rest (found on the leg's own shape), in the room's units.
+const NOM_RISE = (() => {
+  const leg = nomParts.feet[1], [, hy, hz] = NOM_HIPS[1], c = Math.cos(NOM_STAND), sn = Math.sin(NOM_STAND);
+  let rest = Infinity, stood = Infinity;
+  for (let x = 0; x <= 0.7; x += 0.02) for (let y = -0.15; y <= 0.6; y += 0.01) for (let z = -0.1; z <= 0.8; z += 0.02) {
+    if (Math.abs(leg(x, y, z)) > 0.012) continue;                       // on the leg's surface
+    rest = Math.min(rest, y);
+    stood = Math.min(stood, hy + (y - hy) * c - (z - hz) * sn);         // the same point with the leg swung down
+  }
+  return (rest - stood) * alien.scale.y;
+})();
 // Bending the sitting sculpt's legs down drags the surface where they melt into his body (a notch between the legs, an edge
 // above them). So each point also gets a correction: where it belongs on a standing Nom (legs swung down, blended into the
 // body like the sculpt does it), brought back through the bones so that bones + correction land exactly there.
