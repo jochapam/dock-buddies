@@ -2540,7 +2540,10 @@ function pose(t) {
   if (fx === 'sneeze' && W.chat.line === 1) alienBody.rotation.x += 0.2 * Math.exp(-W.chat.lineT * 4) - 0.14 * Math.exp(-W.chat.lineT * 12);   // ACHOO!
   alienBody.rotation.y = -1.25 * reach;
   pivotAbout(alienBody, NOM_BEND_AT);
-  us = Math.max(us, 0.3 * F.grab + 0.12 * F.held * (1 - F.sit));   // arms out to pick Greg up, and round him to carry him
+  // while he's up, his arms come up a little: sitting, his paws rest on his thighs and are melted into them in the sculpt,
+  // so with the legs swung down they'd fuse; held out, they're clear (test other heights with ?standarms=)
+  const STAND_ARMS = params.has('standarms') ? +params.get('standarms') : 0.5;
+  us = Math.max(us, 0.3 * F.grab + 0.12 * F.held * (1 - F.sit), STAND_ARMS * F.stand);   // arms out to pick Greg up, and round him to carry him
   alienArms.rotation.x = -ALIEN_ARM_LIFT * us;
   alienPoses.show(us);
   if (W.nomStretch > 0.06) {                    // arms up for a big yawn
