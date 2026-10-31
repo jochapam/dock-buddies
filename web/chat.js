@@ -86,11 +86,41 @@ async function ask(client, who, userName) {
     thinking: { type: 'disabled' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: schema(who) } },
     system: PERSONAS[who],
-    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\nYour turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
+    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\n${variety(who)}\n\nYour turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
   });
   if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Barry thinks it's time for pancakes." : 'Hmm! New topic?', face: 'normal', activity: 'none' };
   const text = res.content.find(b => b.type === 'text');
   return JSON.parse(text ? text.text : '{}');
+}
+
+// A little variety for each reply, so they don't keep reaching for the same stories: usually nothing in particular,
+// sometimes a moment from Barry's long life (a random one each time), and only now and then Nom's mysterious origins.
+const HISTORY = ['the Sydney Harbour Bridge opening in 1932', 'Prohibition in 1920s Chicago', 'the Hindenburg flights in the 1930s',
+  'the first televised Olympics, 1936', 'the opening of the Golden Gate Bridge, 1937', 'the first McDonald\'s, 1948',
+  'the climb of Everest, 1953', 'the opening of Disneyland, 1955', 'the first Elvis records, 1954', 'the Sydney Opera House build',
+  'the Beatles in Hamburg, 1960', 'the first James Bond film shoot, 1962', 'the 1966 World Cup final', 'Woodstock, 1969',
+  'the first jumbo jet flight, 1970', 'the first email, 1971', 'the first Star Wars premiere, 1977', 'the first Rubik\'s Cube, 1974',
+  'the Concorde\'s first passenger flight, 1976', 'the Sony Walkman launch, 1979', 'the first Pac-Man arcade, 1980',
+  'Live Aid, 1985', 'the first Nintendo in America, 1985', 'Halley\'s Comet, 1986', 'the first website, 1991',
+  'the Channel Tunnel opening, 1994', 'Dolly the sheep, 1996', 'the Sydney 2000 Olympics', 'the first iPod, 2001',
+  'the first Harry Potter film premiere, 2001', 'the 1928 Tour de France', 'the invention of sliced bread, 1928',
+  'Mickey Mouse\'s first cartoon, 1928', 'the first Monopoly sets, 1935', 'the first ballpoint pens, 1945',
+  'the first Polaroid camera, 1948', 'the first credit card dinner, 1950', 'Sputnik, 1957', 'the first Barbie doll, 1959',
+  'the first Moog synthesiser, 1964', 'the first Earth Day, 1970', 'the first video game console, 1972'];
+const FORTUNES = ['a pancake restaurant he opened by accident', 'a hat business that took off for no reason', 'shares in a company he thought made honey',
+  'a racehorse he bought because it looked sleepy', 'a patent for a very comfortable chair', 'a gold mine he bought as a picnic spot',
+  'an umbrella shop in a very rainy year', 'a toy he invented while bored'];
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+function variety(who) {
+  const r = Math.random();
+  if (who === 'B') {
+    if (r < 0.2) return `If it fits naturally (and only then), Barry might mention he was around for ${pick(HISTORY)}: briefly, the Barry way, without explaining it all.`;
+    if (r < 0.28) return `If it fits naturally, Barry might mention ${pick(FORTUNES)}. (It was lost in Vegas.)`;
+    if (r < 0.36) return 'Barry is thinking about pancakes or a nap, if that fits.';
+    return 'No history, Vegas or Bernard this time unless the user asks about them: just answer as Barry.';
+  }
+  if (r < 0.12) return 'If it fits, this is a good moment to mention SoHo or your planet.';
+  return "Don't mention where you're from this time unless the user asks.";
 }
 
 // who should answer first: whoever was named, Nom for space and Greg things, otherwise mostly Barry
