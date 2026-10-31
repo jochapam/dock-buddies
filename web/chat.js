@@ -44,8 +44,8 @@ function nomOfTheDay(s) {
   return moods[((s.month * 37 + s.date) * 7919) % moods.length];
 }
 
-// a safety net for the model slipping into talking about itself by name: in a buddy's own line his own name can only mean
-// himself, so it becomes "I" (doing something), "me" (having something done to him) or "my"/"I've" ("Barry's…")
+// a safety net for Nom slipping into talking about himself by name (Barry does that on purpose): in his own line his name
+// can only mean himself, so it becomes "I" (doing something), "me" (having something done to him) or "my"/"I've" ("Barry's…")
 const BE = { is: 'am', was: 'was', has: 'have', does: 'do', "doesn't": "don't", "isn't": "am not", "wasn't": "wasn't", "hasn't": "haven't" };
 const LEADS = new Set(['and', 'but', 'so', 'then', 'because', 'when', 'if', 'that', 'oh', 'ah', 'well', 'now', 'yes', 'sure']);
 const toI = (verb) => BE[verb] || (/s$/.test(verb) && !/ss$/.test(verb)
@@ -86,7 +86,7 @@ async function ask(client, who, userName) {
     thinking: { type: 'disabled' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: schema(who) } },
     system: PERSONAS[who],
-    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\nYour turn, ${NAME[who]}. Speak as yourself: "I", never "${NAME[who]}".` }],
+    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\nYour turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
   });
   if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Let's talk about something else, huh?" : 'Hmm! New topic?', face: 'normal', activity: 'none' };
   const text = res.content.find(b => b.type === 'text');
@@ -119,7 +119,7 @@ export async function talk(msg, { apiKey, userName }) {
     let then = null;
     for (const who of [first, second]) {
       const r = await ask(client, who, userName);
-      const say = firstPerson(who, (r.say || '').trim());
+      const say = who === 'N' ? firstPerson(who, (r.say || '').trim()) : (r.say || '').trim();   // (Barry talks about himself as "Barry")
       if (r.activity && r.activity !== 'none' && !then) then = r.activity;
       if (r.costume && r.costume !== 'none') window.wearCostume(r.costume === 'off' ? null : r.costume);   // poof!
       if (!say) continue;
