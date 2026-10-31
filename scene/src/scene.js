@@ -1973,6 +1973,7 @@ function direct(t) {
   const beamT = beamChat ? t - beamChat.start - lineLength(beamChat.conv.lines[0]) : -Infinity;   // from the start of Nom's line
   if (beamT >= 0 && D.beamAt == null && D.nMug >= 1) { D.beamAt = t; D.croc = 1; }
   const wantCroc = (beamChat && D.beamAt != null) || (D.pendingAct === 'croc' && D.croc > 0) || (act === 'presents' && actT > 5.5 && actT < ACT_LEN.presents - 2 * MUG_MOVE - 0.4) || ((act === 'croc' || act === 'story' || act === 'movie') && actT < ACT_LEN[act] - 2 * MUG_MOVE - 0.4) || D.sleep > 0.5;   // Greg listens to stories and watches movies too
+  D.wantCroc = wantCroc;   // (so the mug goes straight down in its spot beside him, out of Greg's way)
   // mugs: put down (bending over) before sleeping, stretching or cuddling Greg; picked up again afterwards
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
   const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2)
@@ -2557,12 +2558,14 @@ function pose(t) {
   alienMug.rotation.set((MUG_TILT + ALIEN_ARM_LIFT * us - (0.4 + MUG_TILT) * smooth((us - 0.6) / 0.4)), 0, 0);
   nomFloor.position.set(...lerp3(NOM_FLOOR, NOM_SIDE, smooth(Math.max(W.croc * 3, W.jamSet === 'band' ? W.jamIn * 3 : 0, D.crocSide || 0))));
   nomFloor.position.applyAxisAngle(_yAxis, -F.turn); nomFloor.rotation.y = -F.turn;   // (stays where it is while Nom turns round)
+  const nomUp = Math.max(0, alien.position.y);                    // how far he's off the floor (standing, hopping, bouncing)
+  nomFloor.position.y -= nomUp / alien.scale.y;                   // and stays on the floor while he's up
   { // his soft shadow stays on the floor when he gets up or hops (it's attached to him), a little smaller and fainter the higher he is
-    const up = Math.max(0, alien.position.y);
+    const up = nomUp;
     nomBlob.position.y = (0.005 - up) / alien.scale.y;
     nomBlob.scale.setScalar(1 / (1 + 1.5 * up)); nomBlob.material.opacity = 1 / (1 + 4 * up);
   }
-  D.crocSide = (W.croc > 0 || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
+  D.crocSide = (W.croc > 0 || D.wantCroc || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
   // the coffee pot, held in Nom's paws (brought out from behind, like Greg); Nom leans and shuffles
   // so the spout is right over the mug it's filling
   pot.visible = W.pot > 0.5;
@@ -2598,7 +2601,7 @@ function pose(t) {
   if (croc.visible && !params.has('greg')) {
     // on the floor he stays put in the room while Nom turns; once picked up he's carried round with Nom,
     // then settles into the cuddle as Nom sits down
-    _gp.set(...CROC_FLOOR.p).applyAxisAngle(_yAxis, NOM_TURN - F.turn);
+    _gp.set(...CROC_FLOOR.p).applyAxisAngle(_yAxis, NOM_TURN - F.turn); _gp.y -= Math.max(0, alien.position.y) / alien.scale.y;   // (on the floor, whatever Nom is doing)
     _gq.setFromEuler(_ge.set(...CROC_FLOOR.r)).premultiply(_gq2.setFromAxisAngle(_yAxis, NOM_TURN - F.turn));
     alienBody.updateMatrix(); _gp.applyMatrix4(_gm.copy(alienBody.matrix).invert()); _gq.premultiply(_gq2.copy(alienBody.quaternion).invert());
     const hold = lerp3(CROC_HOLD.p, CROC_HUG.p, F.sit);
