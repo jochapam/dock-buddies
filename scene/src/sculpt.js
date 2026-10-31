@@ -9,8 +9,10 @@ const SCULPTED = [];            // every mesh sculpted this run, in order (for e
 let BAKED = null, bakeIndex = 0;
 // ?bakelimit=N uses only the first N stored meshes and sculpts the rest live (for trying out new shapes)
 const BAKE_LIMIT = typeof location !== 'undefined' ? (+new URLSearchParams(location.search).get('bakelimit') || Infinity) : Infinity;
-if (typeof window !== 'undefined' && window.__BAKED_GZ) {
-  const bin = atob(window.__BAKED_GZ), raw = new Uint8Array(bin.length);
+// stored as plain text in <script id="baked" type="text/plain"> (not JavaScript, so the browser doesn't have to parse it)
+const BAKED_B64 = typeof document !== 'undefined' ? (document.getElementById('baked') || {}).textContent || window.__BAKED_GZ : null;
+if (BAKED_B64) {
+  const bin = atob(BAKED_B64), raw = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
   BAKED = parseBaked(gunzipSync(raw));
 }
@@ -106,33 +108,32 @@ export function tube(base, r, len, rotZ, flatZ) {
 export function lathe(profile, sx, sz) {
   const pts = new THREE.SplineCurve(profile.map(([r, y]) => new THREE.Vector2(r, y))).getPoints(96);
   pts[0].x = 0; pts[pts.length - 1].x = 0;
-  // pre-compute a 2D distance table in (radius, height) so lookups are fast
+  // a 2D distance table in (radius, height), filled in as it's needed: the baked app only ever looks at a small part of it
   const R = 2.2, Y0 = -0.4, Y1 = pts[pts.length - 1].y + 0.6, h = 0.01;
   const nr = Math.ceil(R / h) + 1, ny = Math.ceil((Y1 - Y0) / h) + 1;
-  const table = new Float32Array(nr * ny);
+  const table = new Float32Array(nr * ny).fill(NaN);
   const poly = pts.concat([new THREE.Vector2(0, pts[pts.length - 1].y)]);
-  for (let j = 0; j < ny; j++) {
-    for (let i = 0; i < nr; i++) {
-      const px = i * h, py = Y0 + j * h;
-      let d = Infinity, s = 1;
-      for (let k = 0, m = poly.length - 1; k < poly.length; m = k++) {
-        const a = poly[k], b = poly[m];
-        const ex = b.x - a.x, ey = b.y - a.y, wx = px - a.x, wy = py - a.y;
-        const t = Math.min(Math.max((wx * ex + wy * ey) / (ex * ex + ey * ey || 1), 0), 1);
-        d = Math.min(d, Math.hypot(wx - ex * t, wy - ey * t));
-        const c1 = py >= a.y, c2 = py < b.y, c3 = ex * wy > ey * wx;
-        if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) s = -s;
-      }
-      table[j * nr + i] = s * d;
+  const cell = (i, j) => {
+    const v = table[j * nr + i]; if (v === v) return v;
+    const px = i * h, py = Y0 + j * h;
+    let d = Infinity, s = 1;
+    for (let k = 0, m = poly.length - 1; k < poly.length; m = k++) {
+      const a = poly[k], b = poly[m];
+      const ex = b.x - a.x, ey = b.y - a.y, wx = px - a.x, wy = py - a.y;
+      const t = Math.min(Math.max((wx * ex + wy * ey) / (ex * ex + ey * ey || 1), 0), 1);
+      d = Math.min(d, Math.hypot(wx - ex * t, wy - ey * t));
+      const c1 = py >= a.y, c2 = py < b.y, c3 = ex * wy > ey * wx;
+      if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) s = -s;
     }
-  }
+    return (table[j * nr + i] = s * d);
+  };
   const scale = Math.min(sx, sz);
   return (x, y, z) => {
     const r = Math.hypot(x / sx, z / sz);
     const fi = r / h, fj = (y - Y0) / h;
     if (fi >= nr - 1 || fj < 0 || fj >= ny - 1) return 1;
     const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j;
-    const t00 = table[j * nr + i], t10 = table[j * nr + i + 1], t01 = table[(j + 1) * nr + i], t11 = table[(j + 1) * nr + i + 1];
+    const t00 = cell(i, j), t10 = cell(i + 1, j), t01 = cell(i, j + 1), t11 = cell(i + 1, j + 1);
     return ((t00 * (1 - u) + t10 * u) * (1 - v) + (t01 * (1 - u) + t11 * u) * v) * scale;
   };
 }

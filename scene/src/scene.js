@@ -17,7 +17,7 @@ const params = new URLSearchParams(location.search);
 
 // ---------- renderer / camera ----------
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });   // (test stills read the canvas straight after renderAt, so no need to keep the buffer)
 renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -55,8 +55,8 @@ if (LOOK_SOFT) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.VSMShadowMap;
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.radius = 14; key.shadow.blurSamples = 24;
+  key.shadow.mapSize.set(512, 512);                           // plenty for a shadow this soft (2048 looked the same and drew 16x the pixels every frame)
+  key.shadow.radius = 3.5; key.shadow.blurSamples = 8;         // the same blur width as at 2048 with radius 14
   key.shadow.bias = -0.0004;
   Object.assign(key.shadow.camera, { left: -7, right: 7, top: 6, bottom: -6, near: 1, far: 30 });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 10), new THREE.ShadowMaterial({ opacity: 0.22 }));
@@ -2490,7 +2490,9 @@ if (!params.has('preview')) {
   let last = 0;
   const loop = (now) => {
     requestAnimationFrame(loop);
-    if (now - last < 1000 / 30) return;   // 30 fps keeps it smooth and easy on the battery
+    // 30 fps keeps it smooth and easy on the battery; 15 while they're fast asleep with nothing else moving (slow breaths, drifting z's)
+    const calm = D.sleep > 0.95 && !isRainy() && !fireworks.some(f => f.visible) && !bats.some(b => b.visible);
+    if (now - last < 1000 / (calm ? 15 : 30)) return;
     last = now;
     renderAt((now - start) / 1000);
   };

@@ -13,6 +13,6 @@ data = subprocess.run(['node', 'simplify_baked.mjs'], input=data, stdout=subproc
 gz = gzip.compress(data, 9)
 print(f'raw {len(data)/1e6:.1f} MB -> gzipped {len(gz)/1e6:.1f} MB')
 html = src.read_text()
-html = html.replace('<script>', '<script>window.__BAKED_GZ="' + base64.b64encode(gz).decode() + '";</script><script>', 1)
+html = html.replace('<script>', '<script id="baked" type="text/plain">' + base64.b64encode(gz).decode() + '</script><script>', 1)
 pathlib.Path('buddies_baked.html').write_text(html)
 print('buddies_baked.html', round(len(html) / 1e6, 1), 'MB')
