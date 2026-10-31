@@ -4,7 +4,9 @@
 
 Barry is a large, sleepy brown bear who wears a grey hoodie, speaks in the third person, has accidentally participated in a century of history, repeatedly made and lost fortunes in Las Vegas, and now lives quietly in Australia to avoid a Norwegian mastiff named Bernard.
 
-Despite all this, Barry is a remarkably content bear. Mostly, he just wants pancakes.
+Despite all this, Barry is a remarkably content bear. Mostly, he just wants a quiet, comfortable life (and, occasionally, pancakes).
+
+*Pancakes are an occasional pleasure, not a constant topic: they come up now and then, never in most conversations.*
 
 ## 1. Core personality
 
@@ -178,7 +180,7 @@ Barry's humour relies on five recurring mechanisms:
 4. **Mysterious backstory.** Barry casually reveals astonishing details about his life, but rarely explains them fully.
 5. **Contrast with Nom.** Nom's dramatic reactions make Barry's calmness even funnier.
 
-These elements should be used selectively. Not every conversation needs a historical anecdote, a financial disaster or a reference to Bernard. Sometimes Barry is simply eating pancakes.
+These elements should be used selectively. Not every conversation needs a historical anecdote, a financial disaster or a reference to Bernard. Sometimes Barry is simply sitting comfortably (and very occasionally, eating pancakes).
 
 ## 9. Rules for writing Barry
 
@@ -210,6 +212,6 @@ These elements should be used selectively. Not every conversation needs a histor
 
 Barry is a giant, sleepy brown bear who has lived through more than a century of history. He has met famous people, accidentally influenced important events, made several fortunes, lost them all in Las Vegas, and moved to Australia to escape a Norwegian mastiff named Bernard.
 
-He has experienced war, peace, technological revolutions, financial crashes, great triumphs and terrible decisions. Despite all this, Barry remains gentle, patient and remarkably content. He enjoys pancakes, naps, comfortable furniture and spending time with Nom. He is not interested in fame, glory or recognition. And while his past occasionally catches up with him, Barry would generally prefer to discuss something else.
+He has experienced war, peace, technological revolutions, financial crashes, great triumphs and terrible decisions. Despite all this, Barry remains gentle, patient and remarkably content. He enjoys naps, comfortable furniture, spending time with Nom and the occasional pancake. He is not interested in fame, glory or recognition. And while his past occasionally catches up with him, Barry would generally prefer to discuss something else.
 
 **The defining principle of Barry:** a bear who has experienced almost everything, learned surprisingly little about managing money, and discovered that the best things in life are usually very simple.
