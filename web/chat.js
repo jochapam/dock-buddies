@@ -44,16 +44,27 @@ function nomOfTheDay(s) {
   return moods[((s.month * 37 + s.date) * 7919) % moods.length];
 }
 
-// a safety net for the model slipping into talking about itself by name ("Barry remembers…" -> "I remember…")
+// a safety net for the model slipping into talking about itself by name: in a buddy's own line his own name can only mean
+// himself, so it becomes "I" (doing something), "me" (having something done to him) or "my"/"I've" ("Barry's…")
 const BE = { is: 'am', was: 'was', has: 'have', does: 'do', "doesn't": "don't", "isn't": "am not", "wasn't": "wasn't", "hasn't": "haven't" };
+const LEADS = new Set(['and', 'but', 'so', 'then', 'because', 'when', 'if', 'that', 'oh', 'ah', 'well', 'now', 'yes', 'sure']);
+const toI = (verb) => BE[verb] || (/s$/.test(verb) && !/ss$/.test(verb)
+  ? verb.replace(/ies$/, 'y').replace(/(ss|sh|ch|x|z|o)es$/, '$1').replace(/([^s])s$/, '$1') : verb);
 function firstPerson(who, text) {
-  const name = NAME[who], start = `(^|[.!?…]\\s+)${name}`;
-  const toI = (verb) => BE[verb] || (/s$/.test(verb) && !/ss$/.test(verb)
-    ? verb.replace(/ies$/, 'y').replace(/(ss|sh|ch|x|z|o)es$/, '$1').replace(/([^s])s$/, '$1') : verb);
-  return text
-    .replace(new RegExp(`${start}'s (got|been)\\b`, 'g'), "$1I've $2")              // "Barry's got…" -> "I've got…"
-    .replace(new RegExp(`${start}'s\\b`, 'g'), '$1My')                              // "Barry's mug" -> "My mug"
-    .replace(new RegExp(`${start} ([a-z']+)\\b`, 'g'), (m, pre, verb) => `${pre}I ${toI(verb)}`);
+  const name = NAME[who], t = text.split(/(\s+)/), prevWord = (i) => { for (let j = i - 2; j >= 0; j -= 2) if (t[j]) return t[j]; return ''; };
+  for (let i = 0; i < t.length; i += 2) {
+    const m = t[i].match(new RegExp(`^(["'(]?)${name}('s)?([.,!?…:;"')]*)$`));
+    if (!m) continue;
+    const prev = prevWord(i), start = !prev || /[.!?…]["')]*$/.test(prev);
+    if (!start && /^[A-Z]/.test(prev) && !/[,;:]$/.test(prev)) continue;          // a persona name: "Business Nom", "Goth Nom"
+    const subject = start || /[,;:]$/.test(prev) || LEADS.has(prev.toLowerCase());
+    const next = t[i + 2] || '', cap = (w) => (start ? w[0].toUpperCase() + w.slice(1) : w);
+    if (m[2]) {                                                                  // "Barry's"
+      if (!m[3] && /^(got|been)$/.test(next)) t[i] = `${m[1]}I've`; else t[i] = m[1] + cap('my') + m[3];
+    } else if (subject && !m[3] && /^[a-z']+$/.test(next)) { t[i] = `${m[1]}I`; t[i + 2] = toI(next); }
+    else t[i] = m[1] + (subject && m[3] && !/^[,]/.test(m[3]) ? 'I' : cap('me')) + m[3];
+  }
+  return t.join('');
 }
 
 // short bubbles: split a reply into sentence-sized lines (the scene shows one bubble per line)
@@ -75,7 +86,7 @@ async function ask(client, who, userName) {
     thinking: { type: 'disabled' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: schema(who) } },
     system: PERSONAS[who],
-    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\nYour turn, ${NAME[who]}.` }],
+    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\nYour turn, ${NAME[who]}. Speak as yourself: "I", never "${NAME[who]}".` }],
   });
   if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Let's talk about something else, huh?" : 'Hmm! New topic?', face: 'normal', activity: 'none' };
   const text = res.content.find(b => b.type === 'text');
