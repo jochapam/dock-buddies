@@ -101,9 +101,9 @@ async function ask(client, who, userName) {
     thinking: { type: 'disabled' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: schema(who) } },
     system: PERSONAS[who],
-    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\n${variety(who)}${who === 'B' ? '\n\n' : ''}Your turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
+    messages: [{ role: 'user', content: `${describeScene(window.sceneState(), userName)}\n\nThe conversation so far:\n${transcript}\n\n${(v => v ? v + '\n\n' : '')(variety(who))}Your turn, ${NAME[who]}. ${who === 'B' ? 'Remember: Barry always talks about himself as "Barry", never "I".' : 'Speak as yourself: "I", never "Nom".'}` }],
   });
-  if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Barry thinks it's time for pancakes." : 'Hmm! New topic?', face: 'normal', activity: 'none' };
+  if (res.stop_reason === 'refusal') return { say: who === 'B' ? "Barry thinks it's time for nap." : 'Hmm! New topic?', face: 'normal', activity: 'none' };
   const text = res.content.find(b => b.type === 'text');
   return JSON.parse(text ? text.text : '{}');
 }
@@ -122,12 +122,12 @@ const HISTORY = ['the Sydney Harbour Bridge opening in 1932', 'Prohibition in 19
   'Mickey Mouse\'s first cartoon, 1928', 'the first Monopoly sets, 1935', 'the first ballpoint pens, 1945',
   'the first Polaroid camera, 1948', 'the first credit card dinner, 1950', 'Sputnik, 1957', 'the first Barbie doll, 1959',
   'the first Moog synthesiser, 1964', 'the first Earth Day, 1970', 'the first video game console, 1972'];
-const FORTUNES = ['a pancake restaurant he opened by accident', 'a hat business that took off for no reason', 'shares in a company he thought made honey',
+const FORTUNES = [ 'a diner he opened by accident', 'a hat business that took off for no reason', 'shares in a company he thought made honey',
   'a racehorse he bought because it looked sleepy', 'a patent for a very comfortable chair', 'a gold mine he bought as a picnic spot',
   'an umbrella shop in a very rainy year', 'a toy he invented while bored'];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 function variety(who) {
-  if (who !== 'B') return '';
+  if (who !== 'B') return Math.random() < 0.01 ? 'If it fits, this is a rare good moment for Nom to mention SoHo (or his planet).' : '';
   // Barry's stories are rare: at most one offered a day (remembered on this device)
   const today = new Date().toDateString();
   let last = null; try { last = localStorage.getItem('buddies.storyDay'); } catch (e) {}
@@ -137,8 +137,10 @@ function variety(who) {
       ? `Today's one story, if it fits naturally: Barry might mention he was around for ${pick(HISTORY)}. Briefly, the Barry way.`
       : `Today's one story, if it fits naturally: Barry might mention ${pick(FORTUNES)} (lost it all in Vegas).`;
   }
-  return Math.random() < 0.15 ? 'Barry is thinking about pancakes or a nap, if that fits. No stories about his past.'
-    : 'No stories about Barry\'s past this time (unless the user asks): just answer as Barry.';
+  const r = Math.random();
+  if (r < 0.04) return 'Barry is thinking about pancakes, if that fits. No stories about his past.';
+  if (r < 0.16) return `Barry is thinking about ${pick(['a nap', 'the comfortable chair', 'his coffee', 'the weather', 'how nice it is having Nom around', 'a quiet afternoon'])}, if that fits. No stories about his past, and no pancakes.`;
+  return 'No stories about Barry\'s past this time (unless the user asks), and no pancakes: just answer as Barry.';
 }
 
 // who should answer first: whoever was named, Nom for space and Greg things, otherwise mostly Barry
