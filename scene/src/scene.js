@@ -644,6 +644,9 @@ bearStretch.meshes.forEach(m => (m.visible = false));
 // =====================================================================
 const croc = new THREE.Group();
 alienBody.add(croc);
+const TAIL = { value: new THREE.Vector2() };   // Greg's tail wiggle (set in pose)
+// cuddling Greg: squeezes, nuzzles and tail wiggles at irregular moments
+const SQUEEZES = sipSchedule(5511, 1.5, 2.5, 7), NUZZLES = sipSchedule(7733, 4, 6, 15), TAIL_WIGS = sipSchedule(9917, 3, 5, 13);
 {
   const body = S.ellipsoid([-0.1, 0.02, 0], [0.37, 0.19, 0.19]);
   const head = S.ellipsoid([0.3, 0.19, 0], [0.27, 0.3, 0.22]);          // big round head
@@ -684,6 +687,13 @@ alienBody.add(croc);
   };
   const mesh = new THREE.Mesh(S.sculpt(sdf, [[-1.02, -0.3, -0.32], [0.96, 0.88, 0.32]], 0.014, () => 0, paint), plushMaterial(0xffffff, 0, true, true, C.croc));
   croc.add(mesh);
+  // his tail can wiggle: bent in the shader, more towards the tip of the curl (TAIL: x up and down, y side to side)
+  { const m = mesh.material, prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
+    m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r); sh.uniforms.uTail = TAIL;
+      sh.vertexShader = 'uniform vec2 uTail;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        { float k = clamp((-0.38 - transformed.x) / 0.46, 0.0, 1.0); k *= k;
+          transformed.y += uTail.x * k; transformed.z += uTail.y * k; }`); };
+    m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-tail'; }
   // where the near side's surface is, so face details sit right on it
   const side = (x, y) => { for (let z = 0.4; z > -0.1; z -= 0.003) if (sdf(x, y, z) < 0) return z; return 0; };
   // big glossy eyes with a white glint, close together on top of the head
@@ -2510,7 +2520,9 @@ function pose(t) {
   let tilt = params.has('rest') ? 0 : 0.035 * Math.sin(t * 1.3);
   if (mood === 'curious') tilt += 0.14 * ease;                  // head tilt
   if (mood === 'sleepy') tilt += 0.07 * ease * Math.sin(moodT * 1.2);   // slow, dozy sway
-  if (cuddle && W.watching < 0.5) tilt += 0.09 * Math.sin(t * 2.2);
+  // cuddling: a gentle rock that comes and goes, and now and then a nuzzle (head tipped down onto Greg)
+  const nuzzle = cuddle && !params.has('rest') ? bump(lastStart(t, NUZZLES).since, 1.8) : 0;
+  if (cuddle && W.watching < 0.5) tilt += 0.07 * Math.sin(t * 2.2) * (0.6 + 0.4 * Math.sin(t * 0.37)) - 0.05 * nuzzle;
   tilt += 0.06 * sway + 0.03 * Math.sin(t * 34) * W.scary;   // dancing / shivering at the scary bit
   if (nFace === 'groan') tilt += 0.05 * Math.sin(t * 9) * Math.max(0, 1 - W.chat.lineT / 1.2);   // a little head shake              // rocking the crocodile side to side
   tilt -= 0.07 * W.toastTurn + 0.12 * W.pourBarry;            // leans in for a toast, or to pour for Barry
@@ -2541,7 +2553,7 @@ function pose(t) {
   if (params.has('ears')) { const [ex, es] = params.get('ears').split(',').map(Number); EAR.value.set(ex, es, 0); }   // (test stills: ?ears=sideways,splay)
   // bending down for the mug, and turning round to fetch Greg from behind (or put him back)
   const reach = Math.sin(Math.PI * smooth(W.pot));
-  alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach + 0.32 * F.grab;
+  alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach + 0.32 * F.grab + 0.11 * nuzzle;
   if (fx === 'sneeze' && W.chat.line === 0) alienBody.rotation.x -= 0.14 * smooth(W.chat.lineT / W.chat.len);            // ah… ah…
   if (fx === 'sneeze' && W.chat.line === 1) alienBody.rotation.x += 0.2 * Math.exp(-W.chat.lineT * 4) - 0.14 * Math.exp(-W.chat.lineT * 12);   // ACHOO!
   alienBody.rotation.y = -1.25 * reach;
@@ -2617,7 +2629,13 @@ function pose(t) {
     croc.position.set(_gp.x + (hold[0] - _gp.x) * F.held, _gp.y + (hold[1] - _gp.y) * F.held + 0.12 * Math.sin(Math.PI * F.held), _gp.z + (hold[2] - _gp.z) * F.held);
     croc.position.y += 0.36 * W.scary; croc.position.z += 0.1 * W.scary;   // hiding behind Greg
     croc.quaternion.copy(_gq.slerp(_gq2.setFromEuler(_ge.set(...lerp3(CROC_HOLD.r, CROC_HUG.r, F.sit))), F.held));
-    const sq = cuddle ? 1 - 0.05 * Math.max(0, Math.sin(t * 4.4)) : 1;   // a squeeze now and then
+    const squeeze = cuddle && !params.has('rest') ? bump(lastStart(t, SQUEEZES).since, 0.7) : 0;
+    const sq = 1 - 0.1 * squeeze;                                      // a squeeze now and then
+    alienBody.scale.y *= 1 - 0.025 * squeeze;                          // (Nom squishes a little as he hugs)
+    // Greg's tail: a little wiggle now and then while he's cuddled, and a wobble when he's patted
+    const wig = lastStart(t, TAIL_WIGS).since, wigK = cuddle && wig < 1.3 && !params.has('rest') ? Math.sin(wig * 13) * (1 - wig / 1.3) : 0;
+    const patK = patG ? Math.sin(patAge * 17) * Math.exp(-patAge * 3) : 0;
+    TAIL.value.set(0.08 * wigK + 0.08 * patK, 0.1 * wigK);
     if (patG) croc.rotateZ(0.3 * Math.sin(patAge * 15) * Math.exp(-patAge * 2.5));   // Greg wobbles
     croc.scale.set(CROC_SCALE * sq, CROC_SCALE / sq, CROC_SCALE);
   }
