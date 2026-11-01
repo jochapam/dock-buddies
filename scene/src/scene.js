@@ -1978,6 +1978,7 @@ function direct(t) {
   D.wantCroc = wantCroc;   // (so the mug goes straight down in its spot beside him, out of Greg's way)
   // mugs: put down (bending over) before sleeping, stretching or cuddling Greg; picked up again afterwards
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
+  D.stretchSoon = stretchWindow;   // (Nom puts his mug beside him, out of the way of his feet, when he gets up to stretch)
   const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2)
                   || (act === 'refill' && actT < 11.2)    // Barry sets his mug down next to Nom for a top-up
                   || (act === 'movie' && actT < ACT_LEN.movie - MUG_MOVE - 0.2) || (act === 'presents' && actT < ACT_LEN.presents - MUG_MOVE - 0.2) || jamming || D.jamIn > 0;
@@ -2488,8 +2489,11 @@ function pose(t) {
   const hp = t % 5;
   const hopping = false;   // the little hop is switched off
   const F = gregFetch(params.has('greg') ? 0 : W.croc);
+  // he gets up on his feet for a big stretch too (ahead of his arms going up), and up on tiptoes at the top of it
+  const tiptoe = 0.05 * smooth01((W.nomStretch - 0.75) / 0.25);
+  F.stand = Math.max(F.stand, smooth01(W.nomStretch * 1.6));
   alien.position.y = (hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0) + 0.16 * W.pourBarry;   // up on tiptoes to reach Barry's mug
-  alien.position.y += NOM_RISE * F.stand + 0.09 * F.hop;          // up on his feet (and hopping round) to fetch Greg
+  alien.position.y += NOM_RISE * F.stand + 0.09 * F.hop + tiptoe;   // up on his feet (and hopping round) to fetch Greg, or to stretch
   if (nomSkinQueue.length) { if (F.stand > 0) while (nomSkinQueue.length) nomSkinQueue.shift()(); else nomSkinQueue.shift()(); }   // (legs ready before he stands)
   nomLegBones.forEach(b => (b.rotation.x = NOM_STAND * F.stand));  // legs swing down under him
   { // the clean standing shape for this height: blended between the two nearest corrections
@@ -2570,7 +2574,7 @@ function pose(t) {
     nomBlob.position.y = (0.005 - up) / alien.scale.y;
     nomBlob.scale.setScalar(1 / (1 + 1.5 * up)); nomBlob.material.opacity = 1 / (1 + 4 * up);
   }
-  D.crocSide = (W.croc > 0 || D.wantCroc || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
+  D.crocSide = (W.croc > 0 || D.wantCroc || D.stretchSoon || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
   // the coffee pot, held in Nom's paws (brought out from behind, like Greg); Nom leans and shuffles
   // so the spout is right over the mug it's filling
   pot.visible = W.pot > 0.5;
