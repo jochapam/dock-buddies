@@ -1819,7 +1819,7 @@ const D = { sleep: params.has('preview') || params.has('rest') ? 0 : 1,   // the
             pendingAct: null, actStart: null, act: null, pot: 0, waveStart: null, lastWave: -1e9, wasNear: false, barryJoin: false };
 // Little things they do now and then while awake (one every 4-8 minutes), in this order.
 const ACTS = ['toast', 'croc', 'refill', 'story', 'stretch', 'toast', 'croc', 'refill', 'toast', 'story', 'stretch'];
-const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 13.5, movie: 62, presents: 15 };
+const ACT_LEN = { toast: 5, croc: 19, stretch: 10, story: 48, refill: 17, movie: 62, presents: 15 };
 const MUG_MOVE = 1.6;
 /** presents are opened once a year (remembered in this Mac's web storage) */
 function giftsOpened() { try { return localStorage.getItem('dbGifts') === String(today().getFullYear()) || D.giftHat; } catch { return !!D.giftHat; } }
@@ -1980,9 +1980,9 @@ function direct(t) {
   const stretchWindow = wakeT > -MUG_MOVE - 0.5 && wakeT < 5;
   D.stretchSoon = stretchWindow;   // (Nom puts his mug beside him, out of the way of his feet, when he gets up to stretch)
   const bearWants = D.sleep > 0.02 || stretchWindow || (act === 'story' && actT < ACT_LEN.story - MUG_MOVE - 0.2)
-                  || (act === 'refill' && actT < 11.2)    // Barry sets his mug down next to Nom for a top-up
+                  || (act === 'refill' && actT < 14.8)    // Barry sets his mug down next to Nom for a top-up
                   || (act === 'movie' && actT < ACT_LEN.movie - MUG_MOVE - 0.2) || (act === 'presents' && actT < ACT_LEN.presents - MUG_MOVE - 0.2) || jamming || D.jamIn > 0;
-  const wantPot = act === 'refill' && actT < 9.6;
+  const wantPot = act === 'refill' && actT < 11.4;
   const nomWants = bearWants || beamChat || wantCroc || D.croc > 0 || wantPot || D.pot > 0;
   // instruments come out once the mugs are down, and go away before they're picked up
   D.jamIn = (jamming && D.bMug >= 1 && D.nMug >= 1) ? Math.min(1, (D.jamIn || 0) + dt / 0.6) : Math.max(0, (D.jamIn || 0) - dt / 0.6);
@@ -2003,8 +2003,8 @@ function direct(t) {
   const beamIn = D.beamAt != null ? Math.max(0.001, smooth((t - D.beamAt) / 1.8)) : 0;
   const beamSpark = beamChat ? smooth(Math.min(1, (beamT + 1.4) / 1.2)) * (1 - smooth((beamT - 1.2) / 1.0)) : 0;
   if (params.has('pot')) { D.pot = +params.get('pot'); D.nMug = 1; }
-  else if (wantPot && D.nMug >= 1) D.pot = Math.min(1, (D.pot || 0) + dt / 1.6);       // the coffee pot, fetched the same way
-  else if (!wantPot) D.pot = Math.max(0, (D.pot || 0) - dt / 1.6);
+  else if (wantPot && D.nMug >= 1) D.pot = Math.min(1, (D.pot || 0) + dt / CROC_FETCH);   // the coffee pot, fetched the same way as Greg (up, hop round, back)
+  else if (!wantPot) D.pot = Math.max(0, (D.pot || 0) - dt / CROC_FETCH);
 
   // the stretch: Barry's arms go up 0.8-2 s, stay till 3.8 s, come down by 4.8 s; mugs back up by 6.5 s
   const stretch = wakeT < 6.5 ? smooth(Math.min((wakeT - 0.8) / 1.2, (4.8 - wakeT) / 1.0)) : 0;
@@ -2033,11 +2033,11 @@ function direct(t) {
   const watching = movieT < ACT_LEN.movie ? smooth(Math.min((movieT - 3) / 0.8, (55.5 - movieT) / 0.8)) : 0;
   const doze = Math.max(storyDoze, movieDoze);
 
-  // refill: mug down (0-1.6 s), fetch the pot (to 3.2 s), pour for Barry (4-6.5 s), then into its own mug (7.5-9.5 s)
+  // refill: mug down (0-1.6 s), get up and fetch the pot (to 5 s), pour for Barry (5.4-8 s), then into its own mug (8.6-11 s), take it back (to 14.8 s)
   const refillT = act === 'refill' ? actT : Infinity;
-  const pourBarry = refillT < 14 ? smooth(Math.min((refillT - 3.6) / 0.6, (6.2 - refillT) / 0.6)) : 0;   // into Barry's mug
-  const pourNom = refillT < 14 ? smooth(Math.min((refillT - 6.8) / 0.6, (9.2 - refillT) / 0.6)) : 0;     // then its own
-  const holdOut = refillT < 14 ? smooth(Math.min((refillT - 1.6) / 0.8, (10.5 - refillT) / 0.8)) : 0;   // Barry turns to watch
+  const pourBarry = refillT < 20 ? smooth(Math.min((refillT - 5.4) / 0.6, (8.0 - refillT) / 0.6)) : 0;   // into Barry's mug
+  const pourNom = refillT < 20 ? smooth(Math.min((refillT - 8.6) / 0.6, (11.0 - refillT) / 0.6)) : 0;     // then its own
+  const holdOut = refillT < 20 ? smooth(Math.min((refillT - 1.6) / 0.8, (12.3 - refillT) / 0.8)) : 0;   // Barry turns to watch
 
   // waving hello when your pointer comes close (Nom first; Barry joins in if you stay)
   const near = mouseNear();
@@ -2488,7 +2488,7 @@ function pose(t) {
 
   const hp = t % 5;
   const hopping = false;   // the little hop is switched off
-  const F = gregFetch(params.has('greg') ? 0 : W.croc);
+  const F = gregFetch(params.has('greg') ? 0 : W.croc > 0 ? W.croc : W.pot);   // (the coffee pot waits behind him too)
   // he gets up on his feet for a big stretch too (ahead of his arms going up), and up on tiptoes at the top of it
   const tiptoe = 0.05 * smooth01((W.nomStretch - 0.75) / 0.25);
   F.stand = Math.max(F.stand, smooth01(W.nomStretch * 1.6));
@@ -2500,7 +2500,7 @@ function pose(t) {
     const inf = NOM_STAND_STEPS.map((st, k) => { const lo = k ? NOM_STAND_STEPS[k - 1] : 0, hi = NOM_STAND_STEPS[k + 1];
       return F.stand <= st ? Math.max(0, (F.stand - lo) / (st - lo)) : hi === undefined ? 1 : Math.max(0, (hi - F.stand) / (hi - st)); });
     if (params.has('nostandfix')) inf.fill(0);   // (test stills: bones only)
-    for (const ps of [alienPoses, nomStretch, nomWave, nomStrum]) ps.meshes.forEach(m => { if (m.visible) inf.forEach((v, k) => (m.morphTargetInfluences[k] = v)); });
+    for (const ps of [alienPoses, nomStretch, nomWave, nomStrum]) ps.meshes.forEach(m => inf.forEach((v, k) => (m.morphTargetInfluences[k] = v)));   // (all of them: the arm pose shown can change below, and a stale one flickers for a frame)
   }
   if (mood === 'giggle') alien.position.y += Math.abs(Math.sin(moodT * 16)) * 0.035 * ease;   // little giggly bounce
   const fx = W.chat && W.chat.fx;
@@ -2539,17 +2539,15 @@ function pose(t) {
     }
     EAR.value.set(0.12 * Math.tanh(E.x / 0.12), 0.1 * Math.tanh(E.s / 0.1), 0); }   // never more than a soft flop
   if (params.has('ears')) { const [ex, es] = params.get('ears').split(',').map(Number); EAR.value.set(ex, es, 0); }   // (test stills: ?ears=sideways,splay)
-  // bending down for the mug, and turning round to fetch Greg from behind (or put him back)
-  const reach = Math.sin(Math.PI * smooth(W.pot));
-  alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.12 * reach + 0.32 * F.grab;
+  // bending down for the mug, and leaning down to pick up Greg or the pot from behind him
+  alienBody.rotation.x = NOM_BEND * Math.sin(Math.PI * nomDown) + 0.32 * F.grab;
   if (fx === 'sneeze' && W.chat.line === 0) alienBody.rotation.x -= 0.14 * smooth(W.chat.lineT / W.chat.len);            // ah… ah…
   if (fx === 'sneeze' && W.chat.line === 1) alienBody.rotation.x += 0.2 * Math.exp(-W.chat.lineT * 4) - 0.14 * Math.exp(-W.chat.lineT * 12);   // ACHOO!
-  alienBody.rotation.y = -1.25 * reach;
   pivotAbout(alienBody, NOM_BEND_AT);
   // while he's up, his arms come up a little: sitting, his paws rest on his thighs and are melted into them in the sculpt,
   // so with the legs swung down they'd fuse; held out, they're clear (test other heights with ?standarms=)
   const STAND_ARMS = params.has('standarms') ? +params.get('standarms') : 0.5;
-  us = Math.max(us, 0.3 * F.grab + 0.12 * F.held * (1 - F.sit), STAND_ARMS * F.stand);   // arms out to pick Greg up, and round him to carry him
+  us = Math.max(us, 0.3 * F.grab + 0.12 * F.held * (1 - F.sit), STAND_ARMS * F.stand);   // arms out to pick Greg (or the pot) up, and round him to carry him
   alienArms.rotation.x = -ALIEN_ARM_LIFT * us;
   alienPoses.show(us);
   if (W.nomStretch > 0.06) {                    // arms up for a big yawn
@@ -2577,7 +2575,7 @@ function pose(t) {
   D.crocSide = (W.croc > 0 || D.wantCroc || D.stretchSoon || (W.jamIn > 0 && W.jamSet === 'band')) ? 1 : (nomDown < 0.5 ? 0 : (D.crocSide || 0));   // mug stays to the side until picked up
   // the coffee pot, held in Nom's paws (brought out from behind, like Greg); Nom leans and shuffles
   // so the spout is right over the mug it's filling
-  pot.visible = W.pot > 0.5;
+  pot.visible = W.pot > 0.5;   // (appears in his paws while his back is to us)
   if (pot.visible) {
     const toNom = smooth(W.pourNom);                          // spout turned to the front for its own mug
     pot.rotation.set(0, -Math.PI / 2 * toNom, -1.0 * Math.max(W.pourBarry, W.pourNom));
@@ -2721,7 +2719,7 @@ const outline = STYLE === 'toon' ? new OutlineEffect(renderer, { defaultThicknes
 function renderAt(t) { pose(t); (outline || renderer).render(scene, camera); }
 window.renderAt = renderAt;
 window.__params = params;   // (for test stills)
-window.__pose = pose; window.__D = D; window.__dbg = { bearScarf, nomScarf };       // (for stepping through time in tests without drawing)
+window.__pose = pose; window.__D = D; window.__dbg = { bearScarf, nomScarf, scene };       // (for stepping through time in tests without drawing)
 
 if (!params.has('preview')) {
   const start = performance.now();
