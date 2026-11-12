@@ -1542,7 +1542,8 @@ function patchUniforms() {
               // Every costume painted on: when Nom is up on his feet it ends in one level waistline on his standing shape,
               // with his legs plush below it; sitting (and getting up), his legs and feet stay plush by their bones.
               if (arm) feet = toPaw < 0.0;
-              else if (uStand > 0.5) { feet = false; hem = max(hem, 0.4); }
+              else if (uStand > 0.5) feet = false;
+              if (!arm) hem = mix(hem, 0.15, smoothstep(0.2, 0.8, uStand));               // (standing: down to his hips, lowered as he gets up)
               else if (vLeg > 0.5) feet = true;
               if (uUni > 0.5 && (y < collar || arm) && (y > hem || arm) && !feet) {
                 float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
