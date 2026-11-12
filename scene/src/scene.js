@@ -1093,9 +1093,10 @@ const bearScarf = scarf(0.98, 0.11, 1.08, 0.87, bearBody, 1.66);
 const nomScarf = scarf(0.7, 0.08, 1.0, 0.52, alienBody, 0.66);
 
 // festive: Santa hats, a little tree with twinkling lights, presents on Christmas Day, fireworks at New Year
+const SANTA_RED = new THREE.Color(0xae1427);   // the hats and Nom's Santa suit
 function santaHat(r, h, parent) {
   const g = new THREE.Group();
-  const red = new THREE.MeshToonMaterial({ color: 0xd8343a, gradientMap: TOON_BANDS.cel }), white = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel });
+  const red = new THREE.MeshToonMaterial({ color: SANTA_RED, gradientMap: TOON_BANDS.cel }), white = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel });
   const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 32), red); cone.position.y = h / 2; cone.rotation.z = -0.25; g.add(cone);
   const brim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.98, r * 0.24, 10, 32), white); brim.rotation.x = Math.PI / 2; g.add(brim);
   const pom = new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 16, 12), white); pom.position.set(h * 0.24, h * 0.96, 0); g.add(pom);
@@ -1488,13 +1489,13 @@ function patchUniforms() {
         const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
         m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
           Object.assign(sh.uniforms, { uUni: root === bearBody ? UNIFORM.on : UNIFORM.nomOn, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col }, uPaw: { value: paw },
-                                       uSanta: root === bearBody ? { value: 0 } : UNIFORM.santa, uStand: root === bearBody ? { value: 0 } : UNIFORM.stand });
+                                       uSanta: root === bearBody ? { value: 0 } : UNIFORM.santa, uStand: root === bearBody ? { value: 0 } : UNIFORM.stand, uSantaRed: { value: SANTA_RED } });
           sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.vertexShader
             .replace('#include <skinning_vertex>', '#include <skinning_vertex>\nvPosed = transformed;')   // (Nom standing: his shape once the legs have swung down)
             .replace('#include <begin_vertex>',
             '#include <begin_vertex>\nvUni = position; vRest = uniRest.xyz; vArm = 1.0 - uniRest.w;\n' +   // (w is 1 where there's no uniRest)
             '#ifdef USE_SKINNING\nvLeg = skinIndex.y > 0.5 ? skinWeight.y : 0.0;\n#else\nvLeg = 0.0;\n#endif');   // (Nom's leg bones: how much this is leg)
-          sh.fragmentShader = 'uniform float uUni, uTug, uSanta, uStand; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+          sh.fragmentShader = 'uniform float uUni, uTug, uSanta, uStand; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; uniform vec3 uSantaRed; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
             { float y = vPosed.y + uTug;                                                 // a tug pulls the whole top down a touch (and the hem stays level when Nom stands)
               float collar = uCut.y - 0.06 * smoothstep(0.0, 0.5, vUni.z) * (1.0 - abs(vUni.x));   // dips a little at the front
               bool feet = uCut.w < 0.5
@@ -1515,7 +1516,7 @@ function patchUniforms() {
                 vec3 c = y > uCut.x && !arm ? vec3(0.035, 0.032, 0.045) : uCol;   // a black band across the shoulders, colour below
                 if (uSanta > 0.5) {   // Santa: a red suit with fluffy white trim at the collar, hem and cuffs, and a black belt
                   bool trim = arm ? toPaw < 0.06 : (y < hem + 0.07 || y > collar - 0.08);
-                  c = trim ? vec3(0.98, 0.96, 0.93) : (!arm && abs(y - 0.6) < 0.035 ? vec3(0.012, 0.01, 0.012) : vec3(0.42, 0.006, 0.02)); }   // (linear colours: a deep Santa red)
+                  c = trim ? vec3(0.98, 0.96, 0.93) : (!arm && abs(y - 0.6) < 0.035 ? vec3(0.012, 0.01, 0.012) : uSantaRed); }
                 diffuseColor.rgb = c * (0.85 + 0.2 * gl); } }`);
         };
         m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-uniform' + (root === bearBody ? 'B' : 'N');
