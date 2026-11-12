@@ -1489,10 +1489,13 @@ function patchUniforms() {
         m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
           Object.assign(sh.uniforms, { uUni: root === bearBody ? UNIFORM.on : UNIFORM.nomOn, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col }, uPaw: { value: paw },
                                        uSanta: root === bearBody ? { value: 0 } : UNIFORM.santa });
-          sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni, vRest; varying float vArm;\n' + sh.vertexShader.replace('#include <begin_vertex>',
-            '#include <begin_vertex>\nvUni = position; vRest = uniRest.xyz; vArm = 1.0 - uniRest.w;');   // (w is 1 where there's no uniRest)
-          sh.fragmentShader = 'uniform float uUni, uTug, uSanta; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; varying vec3 vUni, vRest; varying float vArm;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-            { float y = vUni.y + uTug;                                                   // a tug pulls the whole top down a touch
+          sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.vertexShader
+            .replace('#include <skinning_vertex>', '#include <skinning_vertex>\nvPosed = transformed;')   // (Nom standing: his shape once the legs have swung down)
+            .replace('#include <begin_vertex>',
+            '#include <begin_vertex>\nvUni = position; vRest = uniRest.xyz; vArm = 1.0 - uniRest.w;\n' +   // (w is 1 where there's no uniRest)
+            '#ifdef USE_SKINNING\nvLeg = skinIndex.y > 0.5 ? skinWeight.y : 0.0;\n#else\nvLeg = 0.0;\n#endif');   // (Nom's leg bones: how much this is leg)
+          sh.fragmentShader = 'uniform float uUni, uTug, uSanta; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+            { float y = vPosed.y + uTug;                                                 // a tug pulls the whole top down a touch (and the hem stays level when Nom stands)
               float collar = uCut.y - 0.06 * smoothstep(0.0, 0.5, vUni.z) * (1.0 - abs(vUni.x));   // dips a little at the front
               bool feet = uCut.w < 0.5
                 ? (length((vec3(abs(vUni.x), vUni.y, vUni.z) - vec3(0.58, 0.36, 0.62)) / vec3(0.54, 0.46, 0.66)) < 1.05    // his legs and feet stay furry
@@ -1500,7 +1503,7 @@ function patchUniforms() {
                 : (vUni.y < 0.45 && vUni.z > 0.28);
               bool arm = vArm > 0.5;                                                        // the arms: all sleeve, down to the paw
               float toPaw = length(vec3(abs(vRest.x), vRest.y, vRest.z) - uPaw.xyz) - uPaw.w;
-              if (arm) feet = toPaw < 0.0;
+              if (arm) feet = toPaw < 0.0; else if (vLeg > 0.5) feet = true;                // Nom's legs stay plush, with a clean edge when he stands
               if (uSanta > 0.5) collar += 0.07;                                             // (Santa's suit comes up a little higher)
               float hem = uSanta > 0.5 ? 0.45 : uCut.z;                                     // (and stops above his feet)
               if (uUni > 0.5 && (y < collar || arm) && (y > hem || arm) && !feet) {
