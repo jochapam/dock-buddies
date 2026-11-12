@@ -8,7 +8,7 @@ export const FACES = {
 // what they can start when asked (window.doActivity names)
 export const ACTIVITIES = ['none', 'toast', 'croc', 'stretch', 'story', 'refill', 'movie', 'jam', 'wave', 'nap'];
 // what they can dress up as when asked ('off' takes it off; 'none' leaves things as they are)
-export const COSTUMES = ['none', 'off', 'vampire', 'pirate', 'witch', 'mummy', 'traveller', 'captain', 'devil', 'ghost'];
+export const COSTUMES = ['none', 'off', 'vampire', 'pirate', 'witch', 'mummy', 'traveller', 'captain', 'devil', 'ghost', 'santa'];
 
 const WORLD = `
 THE WORLD
@@ -36,7 +36,7 @@ HOW TO TALK
   "stretch", "story" (Barry reads a picture book), "refill" (Nom tops up the coffee), "movie" (movie night),
   "jam" (a jam session), "wave" (you both wave), "nap" (a little nap; any message or tap wakes you).
   costume: dress up together as "vampire", "pirate", "witch", "mummy", "traveller" (long scarf and fedora / fez and bow tie),
-  "captain" (starship uniforms), "devil" or "ghost", for about an hour, any day of the year; "off" takes costumes off.
+  "captain" (starship uniforms), "devil", "ghost" or "santa" (Nom in a Santa suit; Barry keeps his Santa hat), for about an hour, any day of the year; "off" takes costumes off.
   Only one of you needs to set them: if the other buddy already said yes to the request, leave "activity" "none" and
   "costume" "none". Otherwise both are "none".
 - If asked for something you can't do (go somewhere, fetch things from the real world, change the weather), play along

@@ -1103,7 +1103,11 @@ function santaHat(r, h, parent) {
 }
 const bearSanta = santaHat(0.3, 0.55, bearBody); bearSanta.position.set(-0.3, 2.48, 0.3); bearSanta.rotation.set(0.15, 0, 0.45);
 const nomSanta = santaHat(0.22, 0.42, alienBody); nomSanta.position.set(0, 1.4, 0.08); nomSanta.rotation.x = 0.12;
-const gregSanta = santaHat(0.09, 0.18, croc); gregSanta.position.set(0.44, 0.42, 0.02); gregSanta.rotation.z = -0.3;
+const gregSanta = santaHat(0.13, 0.27, croc); gregSanta.position.set(0.37, 0.43, 0.03); gregSanta.rotation.set(0.15, 0, -0.35);   // on top of his head, in front of his horns
+// now and then over the festive season Nom dresses up as Santa: the suit is painted on like the Captain's Day uniform
+// (see patchUniforms), with a gold buckle on the belt; Barry keeps his Santa hat
+const santaDay = (n) => isFestive(n) && ((n.getMonth() === 11 && (n.getDate() === 24 || n.getDate() === 25))
+  || (n.getFullYear() * 37 + n.getMonth() * 31 + n.getDate() * 7) % 3 === 0);   // about one festive day in three, and always on Christmas Eve and Day
 // Halloween costumes (the pumpkin week): Barry is a vampire (cape with a tall red-lined collar, little fangs),
 // Nom is his bat (flapping wings), and Greg gets a tiny witch's hat
 const capeBlack = new THREE.MeshToonMaterial({ color: 0x1c1822, gradientMap: TOON_BANDS.cel, side: THREE.FrontSide });
@@ -1168,10 +1172,13 @@ function costumeToday(n) {
   if (params.has('costume')) return params.get('costume');
   if (costumeAsked && performance.now() < costumeAsked.until) return costumeAsked.name;
   if (params.has('halloween')) return 'vampire';
+  if (santaDay(n)) return 'santa';
   return n.getMonth() === 9 && n.getDate() >= 24 ? COSTUME_DAYS[n.getDate() - 24] : null;
 }
-const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [], traveller: [], captain: [] };
+const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [], traveller: [], captain: [], santa: [] };
 const wear = (name, obj, parent) => { parent.add(obj); obj.visible = false; COSTUME[name].push(obj); return obj; };
+{ const buckle = wear('santa', new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 6, 4), gloss(0xd9b04a, 0.25)), alienBody);   // Santa Nom's square gold buckle
+  buckle.position.set(0, 0.6, alienFrontZ(0, 0.6) + 0.012); buckle.rotation.z = Math.PI / 4; buckle.scale.set(1.2, 0.8, 1); }
 function witchHat(r, h, band) {
   const g = new THREE.Group(), hatMat = toon(0x2e2140);
   const brim = new THREE.Mesh(new THREE.CylinderGeometry(r, r, r * 0.08, 32), hatMat); g.add(brim);
@@ -1453,7 +1460,7 @@ function patchGhostly() {
   walk(bearBody); walk(alienBody);
 }
 // Captain's Day uniforms: a black band across the shoulders and colour below, painted onto the body by height.
-const UNIFORM = { on: { value: 0 }, tug: { value: 0 } };
+const UNIFORM = { on: { value: 0 }, tug: { value: 0 }, nomOn: { value: 0 }, santa: { value: 0 } };   // (Nom's suit is on for the captain or Santa)
 let uniformPatched = false;
 // Each arm pose is its own body mesh, so painting by height would put the shoulder band and chest on arms that
 // pass through them. Instead the arms (found from the sculpt's own arm shapes) get plain sleeves, with the paws
@@ -1480,10 +1487,11 @@ function patchUniforms() {
         m.userData.uniformed = true;
         const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
         m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
-          Object.assign(sh.uniforms, { uUni: UNIFORM.on, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col }, uPaw: { value: paw } });
+          Object.assign(sh.uniforms, { uUni: root === bearBody ? UNIFORM.on : UNIFORM.nomOn, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col }, uPaw: { value: paw },
+                                       uSanta: root === bearBody ? { value: 0 } : UNIFORM.santa });
           sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni, vRest; varying float vArm;\n' + sh.vertexShader.replace('#include <begin_vertex>',
             '#include <begin_vertex>\nvUni = position; vRest = uniRest.xyz; vArm = 1.0 - uniRest.w;');   // (w is 1 where there's no uniRest)
-          sh.fragmentShader = 'uniform float uUni, uTug; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; varying vec3 vUni, vRest; varying float vArm;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+          sh.fragmentShader = 'uniform float uUni, uTug, uSanta; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; varying vec3 vUni, vRest; varying float vArm;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
             { float y = vUni.y + uTug;                                                   // a tug pulls the whole top down a touch
               float collar = uCut.y - 0.06 * smoothstep(0.0, 0.5, vUni.z) * (1.0 - abs(vUni.x));   // dips a little at the front
               bool feet = uCut.w < 0.5
@@ -1491,10 +1499,16 @@ function patchUniforms() {
                    || (abs(vUni.x) > 0.2 && abs(vUni.x) < 0.62 && vUni.y > 0.7 && vUni.y < 1.25 && vUni.z > 0.98))                                    // and so do his paws
                 : (vUni.y < 0.45 && vUni.z > 0.28);
               bool arm = vArm > 0.5;                                                        // the arms: all sleeve, down to the paw
-              if (arm) feet = length(vec3(abs(vRest.x), vRest.y, vRest.z) - uPaw.xyz) < uPaw.w;
-              if (uUni > 0.5 && (y < collar || arm) && (y > uCut.z || arm) && !feet) {
+              float toPaw = length(vec3(abs(vRest.x), vRest.y, vRest.z) - uPaw.xyz) - uPaw.w;
+              if (arm) feet = toPaw < 0.0;
+              if (uSanta > 0.5) collar += 0.07;                                             // (Santa's suit comes up a little higher)
+              float hem = uSanta > 0.5 ? 0.45 : uCut.z;                                     // (and stops above his feet)
+              if (uUni > 0.5 && (y < collar || arm) && (y > hem || arm) && !feet) {
                 float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
                 vec3 c = y > uCut.x && !arm ? vec3(0.035, 0.032, 0.045) : uCol;   // a black band across the shoulders, colour below
+                if (uSanta > 0.5) {   // Santa: a red suit with fluffy white trim at the collar, hem and cuffs, and a black belt
+                  bool trim = arm ? toPaw < 0.06 : (y < hem + 0.07 || y > collar - 0.08);
+                  c = trim ? vec3(0.98, 0.96, 0.93) : (!arm && abs(y - 0.6) < 0.035 ? vec3(0.012, 0.01, 0.012) : vec3(0.42, 0.006, 0.02)); }   // (linear colours: a deep Santa red)
                 diffuseColor.rgb = c * (0.85 + 0.2 * gl); } }`);
         };
         m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-uniform' + (root === bearBody ? 'B' : 'N');
@@ -1531,9 +1545,9 @@ function present(color, ribbon, size, x, z) {
   const r2 = new THREE.Mesh(new THREE.BoxGeometry(size * 0.16, size * 0.82, size * 1.02), rib); r2.position.y = size * 0.4; g.add(r2);
   const lid = new THREE.Group(); lid.position.y = size * 0.8; g.add(lid);
   const bow = new THREE.Mesh(new THREE.TorusKnotGeometry(size * 0.12, size * 0.04, 40, 6, 2, 3), rib); bow.position.y = size * 0.08; lid.add(bow);
-  g.userData.lid = lid; g.visible = false; return g;
+  g.userData.lid = lid; g.userData.lidY = size * 0.8; g.visible = false; return g;
 }
-const gifts = [present(0x3f74b8, 0xffffff, 0.3, 1.0, 1.8), present(0xd8343a, 0xffd34d, 0.24, 1.72, 1.75)];
+const gifts = [present(0x3f74b8, 0xffffff, 0.4, 0.9, 1.45), present(0xd8343a, 0xffd34d, 0.34, -1.02, 1.5)];   // Barry's at his feet, Nom's between them
 const fireworks = Array.from({ length: 96 }, () => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTexEarly(), transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending })); sp.visible = false; scene.add(sp); return sp; });
 
 const bats = [0, 1].map(() => {
@@ -2363,9 +2377,9 @@ function pose(t) {
   const xmas = now.getMonth() === 11 && now.getDate() === 25;
   gifts.forEach((g, i) => {
     const openAt = i === 0 ? 2.5 : 5.5, since = isFinite(W.presentsT) ? W.presentsT - openAt : -1;
-    g.visible = tree.visible && xmas && (!giftsOpened() || since < 1.2);
+    g.visible = tree.visible && xmas && (isFinite(W.presentsT) ? since < 1.2 : !giftsOpened());   // (once opened they stay gone)
     if (!g.visible) return;
-    g.userData.lid.position.y = 0.24 + (since > 0 ? since * 1.6 : 0); g.userData.lid.rotation.z = since > 0 ? since * 4 : 0;
+    g.userData.lid.position.y = g.userData.lidY + (since > 0 ? since * 1.6 : 0); g.userData.lid.rotation.z = since > 0 ? since * 4 : 0;
     g.scale.setScalar(since > 0.3 ? Math.max(0.01, 1 - (since - 0.3) / 0.6) : 1);
   });
   // hearts for pats
@@ -2430,10 +2444,10 @@ function pose(t) {
   for (const k in COSTUME) COSTUME[k].forEach(o => (o.visible = k === costume));
   if (costume === 'ghost' && !ghostPatched) { patchGhostly(); ghostPatched = true; }
   GHOST.value = costume === 'ghost' ? 1 : 0;
-  const captain = costume === 'captain';
-  if (captain && !uniformPatched) { patchUniforms(); uniformPatched = true; }
-  if (captain && uniformQueue.length) uniformQueue.shift()();
-  UNIFORM.on.value = captain ? 1 : 0;
+  const captain = costume === 'captain', santa = costume === 'santa';
+  if ((captain || santa) && !uniformPatched) { patchUniforms(); uniformPatched = true; }
+  if ((captain || santa) && uniformQueue.length) uniformQueue.shift()();
+  UNIFORM.on.value = captain ? 1 : 0; UNIFORM.nomOn.value = captain || santa ? 1 : 0; UNIFORM.santa.value = santa ? 1 : 0;
   { const tg = params.has('tug') ? +params.get('tug') : lastStart(t, TUG_TIMES).since;      // the tug: down sharply, then it settles back
     UNIFORM.tug.value = captain && !params.has('rest') || params.has('tug') ? 0.07 * (tg < 0.25 ? smooth(tg / 0.25) : Math.max(0, 1 - (tg - 0.25) / 0.9)) * (tg < 1.15 ? 1 : 0) : 0; }
   bearMug.userData.setTea(captain);

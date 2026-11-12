@@ -28,7 +28,8 @@ function describeScene(s, userName) {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const bits = [`It's ${days[s.weekday]} ${when} (${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}), ${s.date}/${s.month}.`];
   if (s.month === 10 && s.date >= 24) bits.push("It's Halloween week.");
-  if (s.costume) bits.push(`You're both dressed up as ${s.costume === 'captain' ? 'starship captains' : s.costume + 's'}.`);
+  if (s.costume) bits.push(s.costume === 'santa' ? 'Nom is dressed up as Santa (red suit, white trim, black belt).'
+                          : `You're both dressed up as ${s.costume === 'captain' ? 'starship captains' : s.costume + 's'}.`);
   if (s.festive) bits.push("It's the festive season: Santa hats and a little tree.");
   if (s.weather) bits.push(`Weather where the user is: ${s.weather.temp}°C${s.rain ? ', raining' : ''}${s.hot ? ' (hot: sunglasses and iced coffee)' : ''}${s.cold ? ' (cold: scarves on)' : ''}.`);
   if (s.activity) bits.push(`Right now you're in the middle of: ${{ toast: 'a toast', croc: 'a Greg cuddle', story: "Barry's story time", refill: 'a coffee top-up', movie: 'movie night', presents: 'opening presents' }[s.activity] || s.activity}.`);
