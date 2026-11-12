@@ -308,7 +308,8 @@ function solid(mat, [x, y, z], [sx, sy, sz], parent) {
 function mug(r, h, parent) {
   const g = new THREE.Group();
   const prof = [[0, -h / 2], [r * 0.88, -h / 2], [r * 0.97, -h / 2 + 0.025], [r, -h / 2 + 0.07], [r, h / 2 - 0.02],
-                [r * 0.985, h / 2], [r * 0.9, h / 2], [r * 0.875, h / 2 - 0.05]].map(([x, y]) => new THREE.Vector2(x, y));
+                [r * 0.985, h / 2], [r * 0.9, h / 2], [r * 0.875, h / 2 - 0.05],
+                [r * 0.875, -h / 2 + 0.07], [r * 0.82, -h / 2 + 0.045], [0, -h / 2 + 0.045]].map(([x, y]) => new THREE.Vector2(x, y));   // inside wall and floor, seen as the coffee goes down
   const body = new THREE.Mesh(new THREE.LatheGeometry(prof, 56), M.ceramic); g.add(body);
   const coffee = new THREE.Mesh(new THREE.CircleGeometry(r * 0.88, 48), M.coffee);
   coffee.rotation.x = -Math.PI / 2; coffee.position.y = h / 2 - 0.055;
