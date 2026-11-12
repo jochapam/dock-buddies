@@ -1212,7 +1212,10 @@ function costumeToday(n) {
 const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch: [], mummy: [], devil: [], ghost: [], traveller: [], captain: [], santa: [] };
 const wear = (name, obj, parent) => { parent.add(obj); obj.visible = false; COSTUME[name].push(obj); return obj; };
 { const buckle = wear('santa', new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 6, 4), gloss(0xd9b04a, 0.25)), alienBody);   // Santa Nom's square gold buckle
-  buckle.position.set(0, 0.6, alienFrontZ(0, 0.6) + 0.012); buckle.rotation.z = Math.PI / 4; buckle.scale.set(1.2, 0.8, 1); }
+  buckle.rotation.z = Math.PI / 4; buckle.scale.set(1.2, 0.8, 1); var santaBuckle = buckle; }
+const STAND_HEM = 0.32, STAND_BELT = 0.52;   // Nom's painted-on outfits standing: where they end, and Santa's belt (sitting: 0.6)
+function placeBuckle(up) { const y = 0.6 + (STAND_BELT - 0.6) * up; santaBuckle.position.set(0, y, alienFrontZ(0, y) + 0.012); }
+placeBuckle(0);
 function witchHat(r, h, band) {
   const g = new THREE.Group(), hatMat = toon(0x2e2140);
   const brim = new THREE.Mesh(new THREE.CylinderGeometry(r, r, r * 0.08, 32), hatMat); g.add(brim);
@@ -1543,14 +1546,16 @@ function patchUniforms() {
               // with his legs plush below it; sitting (and getting up), his legs and feet stay plush by their bones.
               if (arm) feet = toPaw < 0.0;
               else if (uStand > 0.5) feet = false;
-              if (!arm) hem = mix(hem, 0.15, smoothstep(0.2, 0.8, uStand));               // (standing: down to his hips, lowered as he gets up)
               else if (vLeg > 0.5) feet = true;
+              float up = smoothstep(0.2, 0.8, uStand);
+              if (!arm) hem = mix(hem, ${STAND_HEM.toFixed(3)}, up);                       // (standing: down to his hips, lowered as he gets up)
+              float belt = mix(0.6, ${STAND_BELT.toFixed(3)}, up);                         // (Santa's belt comes down with it)
               if (uUni > 0.5 && (y < collar || arm) && (y > hem || arm) && !feet) {
                 float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
                 vec3 c = y > uCut.x && !arm ? vec3(0.035, 0.032, 0.045) : uCol;   // a black band across the shoulders, colour below
                 if (uSanta > 0.5) {   // Santa: a red suit with fluffy white trim at the collar, hem and cuffs, and a black belt
                   bool trim = arm ? toPaw < 0.06 : (y < hem + 0.07 || y > collar - 0.08);
-                  c = trim ? vec3(0.98, 0.96, 0.93) : (!arm && abs(y - 0.6) < 0.035 ? vec3(0.012, 0.01, 0.012) : uSantaRed); }
+                  c = trim ? vec3(0.98, 0.96, 0.93) : (!arm && abs(y - belt) < 0.035 ? vec3(0.012, 0.01, 0.012) : uSantaRed); }
                 diffuseColor.rgb = c * (0.85 + 0.2 * gl); } }`);
         };
         m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '-uniform' + (root === bearBody ? 'B' : 'N');
@@ -2549,7 +2554,7 @@ function pose(t) {
   // he gets up on his feet for a big stretch too (ahead of his arms going up), and up on tiptoes at the top of it
   const tiptoe = 0.05 * smooth01((W.nomStretch - 0.75) / 0.25);
   F.stand = Math.max(F.stand, smooth01(W.nomStretch * 1.6));
-  UNIFORM.stand.value = F.stand;
+  UNIFORM.stand.value = F.stand; placeBuckle(smooth01((F.stand - 0.2) / 0.6));
   alien.position.y = (hopping ? Math.sin(Math.PI * hp / 0.45) * 0.12 : 0) + 0.16 * W.pourBarry;   // up on tiptoes to reach Barry's mug
   alien.position.y += NOM_RISE * F.stand + 0.09 * F.hop + tiptoe;   // up on his feet (and hopping round) to fetch Greg, or to stretch
   if (nomSkinQueue.length) { if (F.stand > 0) while (nomSkinQueue.length) nomSkinQueue.shift()(); else nomSkinQueue.shift()(); }   // (legs ready before he stands)
