@@ -1554,7 +1554,7 @@ function patchUniforms() {
                 float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
                 vec3 c = y > uCut.x && !arm ? vec3(0.035, 0.032, 0.045) : uCol;   // a black band across the shoulders, colour below
                 if (uSanta > 0.5) {   // Santa: a red suit with fluffy white trim at the collar, hem and cuffs, and a black belt
-                  bool trim = arm ? toPaw < 0.06 : (y < hem + 0.07 || y > collar - 0.08);
+                  bool trim = arm ? toPaw < 0.045 : (y < hem + 0.07 || y > collar - 0.08);
                   c = trim ? vec3(0.98, 0.96, 0.93) : (!arm && abs(y - belt) < 0.035 ? vec3(0.012, 0.01, 0.012) : uSantaRed); }
                 diffuseColor.rgb = c * (0.85 + 0.2 * gl); } }`);
         };
@@ -1595,7 +1595,14 @@ function present(color, ribbon, size, x, z) {
   g.userData.lid = lid; g.userData.lidY = size * 0.8; g.visible = false; return g;
 }
 const gifts = [present(0x3f74b8, 0xffffff, 0.4, 0.9, 1.45), present(0xd8343a, 0xffd34d, 0.34, -1.02, 1.5)];   // Barry's at his feet, Nom's between them
-const fireworks = Array.from({ length: 96 }, () => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTexEarly(), transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending })); sp.visible = false; scene.add(sp); return sp; });
+// (little star sparks with a soft dark edge, tinted per burst: additive glows vanish on the cream background)
+const fireworkTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); g.translate(32, 32);
+  g.beginPath(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, r = i % 2 ? 11 : 27; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath();
+  g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 3; g.strokeStyle = 'rgba(70, 55, 45, 0.6)'; g.stroke();
+  return new THREE.CanvasTexture(c);
+})();
+const fireworks = Array.from({ length: 96 }, () => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireworkTex, transparent: true, depthWrite: false, toneMapped: false })); sp.visible = false; scene.add(sp); return sp; });
 
 const bats = [0, 1].map(() => {
   const b = new THREE.Group();
@@ -2444,9 +2451,11 @@ function pose(t) {
     const burst = Math.floor(i / 16), period = 2.4, phase = (t + burst * 0.8) % period, n = Math.floor((t + burst * 0.8) / period);
     const r = (k) => { const x = Math.sin((n * 7 + burst) * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
     const a = (i % 16) / 16 * Math.PI * 2, sp = 0.6 + 0.3 * r(3);
-    f.position.set(-2.2 + r(1) * 3.6 + Math.cos(a) * sp * phase, 2.3 + r(2) * 0.7 + Math.sin(a) * sp * phase - 0.25 * phase * phase, -2.2);
-    f.material.color.setHSL(r(4), 0.9, 0.6); f.material.opacity = Math.max(0, 1 - phase / 1.6);
-    const sz = 0.16 * (1 - phase / 2.4); f.scale.set(sz, sz, sz);
+    const left = (burst + n) % 2 === 0, cx = left ? -2.5 + r(1) * 0.7 : 0.95 + r(1) * 0.35;   // in the open sky either side of them
+    f.position.set(cx + Math.cos(a) * sp * phase, (left ? 2.05 : 1.85) + r(2) * 0.6 + Math.sin(a) * sp * phase - 0.25 * phase * phase, 0.4);
+    f.material.color.setHSL(r(4), 0.85, 0.55); f.material.opacity = Math.min(1, phase / 0.08) * Math.max(0, 1 - phase / 1.6);
+    f.material.rotation = a + phase * 3;
+    const sz = 0.15 * (1 - phase / 2.4); f.scale.set(sz, sz, sz);
   });
   // maracas in Nom's paws, shaken on the beat
   uke.visible = strum; uke.scale.setScalar(1.45 * (0.4 + 0.6 * W.jamIn)); uke.rotation.z = -0.45 + 0.03 * beat;
