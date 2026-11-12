@@ -1097,13 +1097,38 @@ const SANTA_RED = new THREE.Color(0xae1427);   // the hats and Nom's Santa suit
 function santaHat(r, h, parent) {
   const g = new THREE.Group();
   const red = new THREE.MeshToonMaterial({ color: SANTA_RED, gradientMap: TOON_BANDS.cel }), white = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: TOON_BANDS.cel });
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 32), red); cone.position.y = h / 2; cone.rotation.z = -0.25; g.add(cone);
+  const coneGeo = new THREE.ConeGeometry(r, h, 32); coneGeo.translate(0, h / 2, 0);   // (tilts from its base, so it stays inside the brim)
+  const cone = new THREE.Mesh(coneGeo, red); cone.rotation.z = -0.25; g.add(cone);
   const brim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.98, r * 0.24, 10, 32), white); brim.rotation.x = Math.PI / 2; g.add(brim);
   const pom = new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 16, 12), white); pom.position.set(h * 0.24, h * 0.96, 0); g.add(pom);
   g.visible = false; parent.add(g); return g;
 }
-const bearSanta = santaHat(0.3, 0.55, bearBody); bearSanta.position.set(-0.3, 2.48, 0.3); bearSanta.rotation.set(0.15, 0, 0.45);
-const nomSanta = santaHat(0.22, 0.42, alienBody); nomSanta.position.set(0, 1.4, 0.08); nomSanta.rotation.x = 0.12;
+// A hat is placed roughly by hand, then settled onto the head: the head's surface is felt for under the brim, and the hat
+// is tipped to lie on it and lowered until the brim just rests on it (so it neither sinks in nor floats).
+function seatHat(hat, head, r) {
+  hat.parent.updateMatrixWorld(true); head.updateMatrixWorld(true);
+  const probe = new THREE.Mesh(head.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  probe.matrixAutoUpdate = false; probe.matrixWorld.copy(head.matrixWorld);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(hat.getWorldQuaternion(new THREE.Quaternion())), down = up.clone().negate();
+  const ray = new THREE.Raycaster(), hits = [];
+  for (let k = 0; k < 16; k++) {
+    const a = k / 16 * Math.PI * 2, p = hat.localToWorld(new THREE.Vector3(r * Math.cos(a), 0, r * Math.sin(a)));
+    ray.set(p.addScaledVector(up, 0.3), down); ray.far = 0.8;
+    const h = ray.intersectObject(probe)[0]; if (h) hits.push(h.point);
+  }
+  if (hits.length < 12) return;   // (not over the head: leave it where it was put)
+  const c = hits.reduce((m, p) => m.add(p), new THREE.Vector3()).divideScalar(hits.length), n = new THREE.Vector3();
+  hits.forEach((p, k) => n.add(new THREE.Vector3().subVectors(p, c).cross(new THREE.Vector3().subVectors(hits[(k + 1) % hits.length], c))));
+  n.normalize(); if (n.dot(up) < 0) n.negate();
+  const toParent = new THREE.Matrix4().copy(hat.parent.matrixWorld).invert();
+  hat.position.copy(c.addScaledVector(n, r * 0.12).applyMatrix4(toParent));
+  const yaw = hat.rotation.y;
+  hat.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n.transformDirection(toParent)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw));
+}
+const bearSanta = santaHat(0.3, 0.55, bearBody); bearSanta.position.set(-0.22, 2.62, 0.25); bearSanta.rotation.set(0.1, 0, 0.3);
+seatHat(bearSanta, bearPoses.meshes[0], 0.3);
+const nomSanta = santaHat(0.19, 0.38, alienBody); nomSanta.position.set(0, 1.42, 0.34); nomSanta.rotation.x = 0.55;   // on his forehead, in front of his ears
+seatHat(nomSanta, alienPoses.meshes[0], 0.19);
 const gregSanta = santaHat(0.13, 0.27, croc); gregSanta.position.set(0.37, 0.43, 0.03); gregSanta.rotation.set(0.15, 0, -0.35);   // on top of his head, in front of his horns
 // now and then over the festive season Nom dresses up as Santa: the suit is painted on like the Captain's Day uniform
 // (see patchUniforms), with a gold buckle on the belt; Barry keeps his Santa hat
