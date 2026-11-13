@@ -27,8 +27,18 @@ if ((new URLSearchParams(location.search).get('style') || 'cel') !== 'plush') re
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(14, 1, 0.1, 100);
-camera.position.set(-0.45, 3.1, 15.3);
-camera.lookAt(-0.45, 1.33, 0);
+const CAM_POS = new THREE.Vector3(-0.45, 3.1, 15.3), CAM_AT = new THREE.Vector3(-0.45, 1.33, 0);
+camera.position.copy(CAM_POS);
+camera.lookAt(CAM_AT);
+/** Make room above them for `extra` (room units, e.g. Barry standing up): the view eases back by just that much,
+ *  keeping the floor where it is at the bottom of the window. 0 puts it back. */
+function roomAbove(extra) {
+  const H = 2 * CAM_POS.distanceTo(CAM_AT) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));   // the view's height where they sit
+  const zoom = H / (H + extra);
+  if (Math.abs(camera.zoom - zoom) < 1e-5) return;
+  camera.zoom = zoom; camera.position.copy(CAM_POS); camera.position.y += extra / 2;
+  camera.lookAt(CAM_AT.x, CAM_AT.y + extra / 2, CAM_AT.z); camera.updateProjectionMatrix();
+}
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
@@ -177,7 +187,13 @@ function plushMaterial(color, occ, useAo = false, vertexColors = false, sheenBas
     sh.uniforms.uRim = { value: RIM };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vLocal; varying float vAo;\n#ifdef USE_CREASE\nattribute float ao;\n#endif')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position;\n#ifdef USE_CREASE\nvAo = ao;\n#else\nvAo = 1.0;\n#endif');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position;\n#ifdef USE_CREASE\nvAo = ao;\n#else\nvAo = 1.0;\n#endif' +
+        // (standing up, the creases between legs and body unfold: their shading would stretch into streaks down the legs)
+        '\n#if defined(USE_SKINNING) && defined(USE_MORPHTARGETS)\n{ float up = 0.0; for (int i = 0; i < MORPHTARGETS_COUNT; i++) up += morphTargetInfluences[i];' +
+        '\n  vAo = mix(vAo, 1.0, clamp(up, 0.0, 1.0) * skinWeight.y); }\n#endif')
+      .replace('#include <skinning_vertex>', '#include <skinning_vertex>\n#if defined(USE_SKINNING) && defined(USE_MORPHTARGETS)\n' +
+        // (and the felt grain follows the legs' standing shape, instead of being stretched along them)
+        '{ float up = 0.0; for (int i = 0; i < MORPHTARGETS_COUNT; i++) up += morphTargetInfluences[i];\n  vLocal = mix(vLocal, transformed, clamp(up, 0.0, 1.0) * skinWeight.y); }\n#endif');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uOcc; uniform vec3 uRim; varying vec3 vLocal; varying float vAo; ${NOISE}`)
@@ -383,7 +399,7 @@ const bear = new THREE.Group();
 bear.position.set(0.15, 0, 0);
 bear.rotation.y = -0.2;
 scene.add(bear);
-groundShadow(3.2, 2.6, bear).position.z = 0.35;
+const bearBlob = groundShadow(3.2, 2.6, bear); bearBlob.position.z = 0.35;
 const bearBody = new THREE.Group();
 bear.add(bearBody);
 // One soft body: ears, legs and arms all melt smoothly into it (sculpted as a single surface).
@@ -422,6 +438,7 @@ const FUR_LIFT = params.has('fur') ? 0.045 : 0;   // keeps face details sitting 
       return d;
     };
   });      // small round feet
+  var bearParts = { body, feet };   // (for the leg bones: which parts of each sculpt are leg)
   // slim arms: from the shoulder down along his side, curving forward so the round paw rests on his lower tummy
   // soft arms that curl gradually along their whole length (no single elbow): from the shoulder,
   // down his side, round to the front, ending in a slightly plumper paw beside the mug
@@ -741,7 +758,7 @@ const nomRoundBottom = S.lathe([[0, 0.0], [0.25, 0.02], [0.42, 0.07], [0.55, 0.1
  * a few heights on the way up (STEPS, blended between as it rises). The weights and corrections are worked out after start-up,
  * one sculpt a frame (queue), since they're only needed to stand.
  */
-function legRig({ body, mover, parts, hips, angle, roundBottom, blend, lower, riseBox, poseSets }) {
+function legRig({ body, mover, parts, hips, angle, roundBottom, blend, lower, riseBox, poseSets, size = 1 }) {   // (size: how big it is next to Nom)
   const STEPS = [1 / 3, 2 / 3, 1];
   const root = new THREE.Bone(), bones = hips.map(p => { const b = new THREE.Bone(); b.position.set(...p); root.add(b); return b; });
   body.add(root);
@@ -773,22 +790,27 @@ function legRig({ body, mover, parts, hips, angle, roundBottom, blend, lower, ri
     let py = HY + (1 - w) * ry + w * (ry * _sc - rz * _ss), pz = HZ + (1 - w) * rz + w * (ry * _ss + rz * _sc), px = x;
     // slide it onto the standing surface (a few steps along the distance gradient)
     const e = 0.004, sx = px, sy = py, sz = pz; let gx = 0, gy = 0, gz = 0, d = 1;
-    for (let i = 0; i < 14; i++) {
+    const E = 0.006 * size * size;   // (a bigger character's shape is a coarser distance table: its surface direction is read over a wider span)
+    for (let i = 0; i < Math.ceil(14 * size); i++) {
       d = standing(px, py, pz);
       gx = (standing(px + e, py, pz) - d) / e; gy = (standing(px, py + e, pz) - d) / e; gz = (standing(px, py, pz + e) - d) / e;
       const g2 = gx * gx + gy * gy + gz * gz || 1;
       if (Math.abs(d) < 1e-4) break;
-      const k = Math.min(1, 0.04 / Math.abs(d));                      // small steps, so it can't leap to another surface
+      const k = Math.min(1, 0.04 * size / Math.abs(d));               // small steps, so it can't leap to another surface
       px -= k * d * gx / g2; py -= k * d * gy / g2; pz -= k * d * gz / g2;
     }
     // only a gentle nudge onto a surface it actually reached, faded out (never cut off, which would leave a step between
     // neighbouring points) where it moves a long way or doesn't settle, and towards the edges of the region it covers
-    f *= smooth01((0.4 - Math.hypot(px - sx, py - sy, pz - sz)) / 0.1) * smooth01((0.015 - Math.abs(d)) / 0.008);   // (the top of the thigh swings out furthest)
+    f *= smooth01((0.4 * size - Math.hypot(px - sx, py - sy, pz - sz)) / (0.1 * size)) * smooth01((0.015 - Math.abs(d)) / 0.008);   // (the top of the thigh swings out furthest)
     if (f <= 0) return;
     // and back through the bones: the blend is A = (1-w) I + w R (about the hip, in y/z only), so rest = A^-1 (target - hip) + hip
     const a = 1 - w + w * _sc, b = w * _ss, det = a * a + b * b, ty = py - HY, tz = pz - HZ;
     const qy = HY + (a * ty + b * tz) / det, qz = HZ + (-b * ty + a * tz) / det;
     dP[v * 3] = f * (px - x); dP[v * 3 + 1] = f * (qy - y); dP[v * 3 + 2] = f * (qz - z);
+    if (size > 1) {   // (and from both sides, so it's smooth from one point to the next)
+      gx = (standing(px + E, py, pz) - standing(px - E, py, pz)) / (2 * E); gy = (standing(px, py + E, pz) - standing(px, py - E, pz)) / (2 * E);
+      gz = (standing(px, py, pz + E) - standing(px, py, pz - E)) / (2 * E);
+    }
     // the surface's own direction there, brought back the same way (normals go through A transposed)
     const gl = Math.hypot(gx, gy, gz) || 1, mx = gx / gl, my = (a * gy + b * gz) / gl, mz = (-b * gy + a * gz) / gl, ml = Math.hypot(mx, my, mz) || 1;
     dN[v * 3] = f * (mx / ml - nx); dN[v * 3 + 1] = f * (my / ml - ny); dN[v * 3 + 2] = f * (mz / ml - nz);
@@ -810,6 +832,23 @@ function legRig({ body, mover, parts, hips, angle, roundBottom, blend, lower, ri
         _sc = Math.cos(angle * st); _ss = Math.sin(angle * st); _round = st;
         standFix(x, y, z, w, N.getX(v), N.getY(v), N.getZ(v), g.morphAttributes.position[k].array, g.morphAttributes.normal[k].array, v, f);
       });
+    }
+    if (size > 1) {   // (on a big character the standing legs are long thin slivers of the sitting surface: their corrected
+                      //  directions are smoothed over each point's neighbours, or the shading comes out in stripes along them)
+      const idx3 = g.index.array, first = new Int32Array(n + 1), nb = new Int32Array(idx3.length * 2);
+      for (let i = 0; i < idx3.length; i++) first[idx3[i] + 1] += 2;
+      for (let i = 0; i < n; i++) first[i + 1] += first[i];
+      const put = first.slice(0, -1);
+      for (let t = 0; t < idx3.length; t += 3) for (let e = 0; e < 3; e++) { const a = idx3[t + e]; nb[put[a]++] = idx3[t + (e + 1) % 3]; nb[put[a]++] = idx3[t + (e + 2) % 3]; }
+      for (const att of g.morphAttributes.normal) for (let round = 0; round < 8; round++) {
+        const a = att.array, out = new Float32Array(a.length);
+        for (let i = 0; i < n; i++) {
+          let x = a[i * 3], y = a[i * 3 + 1], z = a[i * 3 + 2];
+          for (let k = first[i]; k < first[i + 1]; k++) { const j = nb[k] * 3; x += a[j]; y += a[j + 1]; z += a[j + 2]; }
+          const c = 1 + first[i + 1] - first[i]; out[i * 3] = x / c; out[i * 3 + 1] = y / c; out[i * 3 + 2] = z / c;
+        }
+        a.set(out);
+      }
     }
     g.attributes.skinIndex.needsUpdate = g.attributes.skinWeight.needsUpdate = true;
     g.morphAttributes.position.forEach(a => (a.needsUpdate = true)); g.morphAttributes.normal.forEach(a => (a.needsUpdate = true));
@@ -851,6 +890,13 @@ function legRig({ body, mover, parts, hips, angle, roundBottom, blend, lower, ri
 }
 const nomLegs = legRig({ body: alienBody, mover: alien, parts: nomParts, hips: NOM_HIPS, angle: NOM_STAND, roundBottom: nomRoundBottom,
                          blend: 0.09, lower: 0.62, riseBox: [[0, -0.15, -0.1], [0.7, 0.6, 0.8], 0.02], poseSets: [alienPoses, nomStretch, nomWave, nomStrum] });
+// Barry's: he gets up on his feet for his big good-morning stretch
+const BEAR_HIPS = [[-0.52, 0.45, 0.25], [0.52, 0.45, 0.25]];
+const BEAR_STAND = +(params.get('barrylegs') || 1.25);
+const bearRoundBottom = S.lathe([[0, 0.0], [0.45, 0.02], [0.75, 0.08], [0.95, 0.18], [1.08, 0.33], [1.14, 0.55], [1.16, 0.75], [1.14, 0.95], [1.09, 1.35],
+  [1.0, 1.75], [0.92, 2.08], [0.79, 2.38], [0.6, 2.6], [0.34, 2.73], [0, 2.77]], 1.08, 0.85);
+const bearLegs = legRig({ body: bearBody, mover: bear, parts: bearParts, hips: BEAR_HIPS, angle: BEAR_STAND, roundBottom: bearRoundBottom,
+                          blend: 0.14, lower: 0.95, riseBox: [[0, -0.2, -0.2], [1.2, 1.0, 1.45], 0.03], poseSets: [bearPoses, bearStretch, bearWave, bearTap], size: 1.75 });
 nomStrum.meshes.forEach(m => (m.visible = false)); bearTap.meshes.forEach(m => (m.visible = false));
 
 // =====================================================================
@@ -1265,6 +1311,7 @@ const wear = (name, obj, parent) => { parent.add(obj); obj.visible = false; COST
   nose.position.set(0, 2.09, fz(0, 1.98) + 0.115); nose.scale.set(0.105, 0.085, 0.07);
 }
 const STAND_HEM = 0.32, STAND_BELT = 0.52;   // Nom's painted-on outfits standing: where they end, and Santa's belt (sitting: 0.6)
+const BEAR_STAND_HEM = 0.5;                  // and where Barry's end when he stands
 function placeBuckle(up) { const y = 0.6 + (STAND_BELT - 0.6) * up; santaBuckle.position.set(0, y, alienFrontZ(0, y) + 0.012); }
 placeBuckle(0);
 function witchHat(r, h, band) {
@@ -1548,7 +1595,7 @@ function patchGhostly() {
   walk(bearBody); walk(alienBody);
 }
 // Captain's Day uniforms: a black band across the shoulders and colour below, painted onto the body by height.
-const UNIFORM = { on: { value: 0 }, tug: { value: 0 }, nomOn: { value: 0 }, santa: { value: 0 }, stand: { value: 0 } };   // (Nom's suit is on for the captain or Santa; stand: Nom up on his feet)
+const UNIFORM = { on: { value: 0 }, tug: { value: 0 }, nomOn: { value: 0 }, santa: { value: 0 }, stand: { value: 0 }, bearStand: { value: 0 } };   // (Nom's suit is on for the captain or Santa; stand: Nom up on his feet)
 let uniformPatched = false;
 // Each arm pose is its own body mesh, so painting by height would put the shoulder band and chest on arms that
 // pass through them. Instead the arms (found from the sculpt's own arm shapes) get plain sleeves, with the paws
@@ -1576,13 +1623,13 @@ function patchUniforms() {
         const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
         m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
           Object.assign(sh.uniforms, { uUni: root === bearBody ? UNIFORM.on : UNIFORM.nomOn, uTug: UNIFORM.tug, uCut: { value: cut }, uCol: { value: col }, uPaw: { value: paw },
-                                       uSanta: root === bearBody ? { value: 0 } : UNIFORM.santa, uStand: root === bearBody ? { value: 0 } : UNIFORM.stand, uSantaRed: { value: SANTA_RED } });
+                                       uSanta: root === bearBody ? { value: 0 } : UNIFORM.santa, uStand: root === bearBody ? UNIFORM.bearStand : UNIFORM.stand, uStandHem: { value: root === bearBody ? BEAR_STAND_HEM : STAND_HEM }, uSantaRed: { value: SANTA_RED } });
           sh.vertexShader = 'attribute vec4 uniRest; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.vertexShader
             .replace('#include <skinning_vertex>', '#include <skinning_vertex>\nvPosed = transformed;')   // (Nom standing: his shape once the legs have swung down)
             .replace('#include <begin_vertex>',
             '#include <begin_vertex>\nvUni = position; vRest = uniRest.xyz; vArm = 1.0 - uniRest.w;\n' +   // (w is 1 where there's no uniRest)
             '#ifdef USE_SKINNING\nvLeg = skinIndex.y > 0.5 ? skinWeight.y : 0.0;\n#else\nvLeg = 0.0;\n#endif');   // (Nom's leg bones: how much this is leg)
-          sh.fragmentShader = 'uniform float uUni, uTug, uSanta, uStand; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; uniform vec3 uSantaRed; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+          sh.fragmentShader = 'uniform float uUni, uTug, uSanta, uStand, uStandHem; uniform vec4 uCut; uniform vec3 uCol; uniform vec4 uPaw; uniform vec3 uSantaRed; varying vec3 vUni, vRest, vPosed; varying float vArm, vLeg;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
             { float y = vPosed.y + uTug;                                                 // a tug pulls the whole top down a touch (and the hem stays level when Nom stands)
               float collar = uCut.y - 0.06 * smoothstep(0.0, 0.5, vUni.z) * (1.0 - abs(vUni.x));   // dips a little at the front
               bool feet = uCut.w < 0.5
@@ -1593,13 +1640,13 @@ function patchUniforms() {
               float toPaw = length(vec3(abs(vRest.x), vRest.y, vRest.z) - uPaw.xyz) - uPaw.w;
               if (uSanta > 0.5) collar += 0.07;                                             // (Santa's suit comes up a little higher)
               float hem = uSanta > 0.5 ? 0.45 : uCut.z;                                     // (and stops above his feet)
-              // Every costume painted on: when Nom is up on his feet it ends in one level waistline on his standing shape,
-              // with his legs plush below it; sitting (and getting up), his legs and feet stay plush by their bones.
+              // Every costume painted on: when Nom (or Barry) is up on his feet it ends in one level waistline on his standing
+              // shape, with his legs plush below it; sitting (and getting up), his legs and feet stay plush by their bones.
               if (arm) feet = toPaw < 0.0;
               else if (uStand > 0.5) feet = false;
               else if (vLeg > 0.5) feet = true;
               float up = smoothstep(0.2, 0.8, uStand);
-              if (!arm) hem = mix(hem, ${STAND_HEM.toFixed(3)}, up);                       // (standing: down to his hips, lowered as he gets up)
+              if (!arm) hem = mix(hem, uStandHem, up);                                      // (standing: down to the hips, lowered on the way up)
               float belt = mix(0.6, ${STAND_BELT.toFixed(3)}, up);                         // (Santa's belt comes down with it)
               if (uUni > 0.5 && (y < collar || arm) && (y > hem || arm) && !feet) {
                 float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
@@ -2348,6 +2395,10 @@ function pose(t) {
   }
   pivotAbout(bearBody, BEAR_BEND_AT);
   bearArms.rotation.x = -BEAR_ARM_LIFT * bs;
+  bear.position.y = bearLegs.set(params.has('barrystand') ? +params.get('barrystand') : smooth01(W.stretch * 1.6));   // up on his feet for his stretch
+  bearBlob.position.y = -bear.position.y / bear.scale.y;   // (his shadow stays on the floor)
+  UNIFORM.bearStand.value = bearLegs.rise ? bear.position.y / bearLegs.rise : 0;
+  roomAbove(bear.position.y);                                // (and the view eases back to keep his head in)
   bearPoses.show(bs);
   if (W.stretch > 0.06) {                       // arms up in a big Y
     bearPoses.meshes.forEach(m => (m.visible = false));
@@ -2366,7 +2417,7 @@ function pose(t) {
   bearMug.rotation.set((MUG_TILT + BEAR_ARM_LIFT * bs - (0.5 + MUG_TILT) * smooth((bs - 0.6) / 0.4)), 0, 0);
   // for a refill, Barry sets his mug down by Nom (and it stays there until he picks it up again)
   if (W.pot > 0 || W.pourBarry > 0) D.bSide = 1; else if (bearDown < 0.02) D.bSide = 0;
-  bearFloor.position.set(...lerp3([0, 0.24, 1.55], [-0.48, 0.24, 1.68], D.bSide || 0));
+  bearFloor.position.set(...lerp3([0, 0.24, 1.55], [-0.48, 0.24, 1.68], D.bSide || 0)); bearFloor.position.y -= bear.position.y / bear.scale.y;   // (on the floor while he's up)
   placeMug(bearMug, bearArms, BEAR_MUG_HOLD, bearFloor, bearDown);
   // popcorn and tambourine ride in his paws, kept upright
   popcorn.visible = W.bowl > 0.01; popcorn.scale.setScalar(0.4 + 0.6 * W.bowl); popcorn.rotation.x = BEAR_ARM_LIFT * bs - 0.15;
