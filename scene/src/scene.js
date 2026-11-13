@@ -1213,6 +1213,32 @@ const COSTUME = { vampire: [vampire, ...batWings, gregWitch], pirate: [], witch:
 const wear = (name, obj, parent) => { parent.add(obj); obj.visible = false; COSTUME[name].push(obj); return obj; };
 { const buckle = wear('santa', new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 6, 4), gloss(0xd9b04a, 0.25)), alienBody);   // Santa Nom's square gold buckle
   buckle.rotation.z = Math.PI / 4; buckle.scale.set(1.2, 0.8, 1); var santaBuckle = buckle; }
+// Barry the reindeer, to go with Santa Nom: soft plush antlers (in place of his Santa hat) and a red nose
+{
+  const felt = new THREE.MeshToonMaterial({ color: 0x8b5a36, gradientMap: TOON_BANDS.cel });
+  const probe = new THREE.Mesh(bearPoses.meshes[0].geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const ray = new THREE.Raycaster();
+  for (const s of [-1, 1]) {
+    ray.set(new THREE.Vector3(s * 0.34, 4, 0.18), new THREE.Vector3(0, -1, 0));
+    const hit = ray.intersectObject(probe)[0], y0 = hit ? hit.point.y - 0.03 : 2.7;   // (sat on the top of his head)
+    const g = wear('santa', new THREE.Group(), bearBody); g.position.set(s * 0.34, y0, 0.18); g.scale.setScalar(0.7); g.rotation.z = -s * 0.3;   // small, leaning outwards
+    const branch = (pts, r0, r1) => {
+      const curve = new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(s * x, y, z)));
+      const geo = new THREE.TubeGeometry(curve, 16, 1, 10), pos = geo.attributes.position, c = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {   // taper from r0 to r1 along the branch
+        const u = Math.floor(i / 11) / 16, p = curve.getPointAt(u, c), k = r0 + (r1 - r0) * u;
+        pos.setXYZ(i, p.x + (pos.getX(i) - p.x) * k, p.y + (pos.getY(i) - p.y) * k, p.z + (pos.getZ(i) - p.z) * k);
+      }
+      geo.computeVertexNormals(); g.add(new THREE.Mesh(geo, felt));
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(r1, 12, 10), felt); tip.position.copy(curve.getPointAt(1)); g.add(tip);
+    };
+    branch([[0, -0.05, 0], [0.06, 0.18, -0.02], [0.18, 0.38, -0.04], [0.32, 0.52, -0.02]], 0.1, 0.065);   // the main beam, curving outwards
+    branch([[0.07, 0.2, -0.02], [-0.02, 0.33, 0.0], [-0.04, 0.45, 0.02]], 0.07, 0.055);                    // a tine pointing up
+    branch([[0.17, 0.37, -0.04], [0.2, 0.5, 0.02], [0.18, 0.6, 0.05]], 0.06, 0.05);                      // and a smaller one
+  }
+  const nose = wear('santa', new THREE.Mesh(new THREE.SphereGeometry(1, 24, 18), gloss(0xd0182b, 0.15)), bearBody);   // over his own nose
+  nose.position.set(0, 2.09, fz(0, 1.98) + 0.115); nose.scale.set(0.105, 0.085, 0.07);
+}
 const STAND_HEM = 0.32, STAND_BELT = 0.52;   // Nom's painted-on outfits standing: where they end, and Santa's belt (sitting: 0.6)
 function placeBuckle(up) { const y = 0.6 + (STAND_BELT - 0.6) * up; santaBuckle.position.set(0, y, alienFrontZ(0, y) + 0.012); }
 placeBuckle(0);
@@ -2420,7 +2446,7 @@ function pose(t) {
   bearSunnies.visible = hot && W.sleep < 0.5; nomSunnies.forEach(l => (l.visible = hot && W.sleep < 0.5)); nomBridge.visible = hot && W.sleep < 0.5;
   // the festive season (1 Dec - 6 Jan): Santa hats, the tree, and presents on Christmas Day
   const festive = isFestive(now);
-  bearSanta.visible = festive && !W.hats; nomSanta.visible = festive && !W.hats;
+  bearSanta.visible = festive && !W.hats && costumeToday(now) !== 'santa'; nomSanta.visible = festive && !W.hats;   // (on Santa Nom days Barry's a reindeer instead)
   bearScarf.visible = !!(cold || (festive && D.giftScarf));
   bearScarf.scale.setScalar(1); if (W.presentsT < 4) bearScarf.scale.setScalar(Math.max(0.01, smooth((W.presentsT - 2.5) / 0.6)));
   bearScarf.scale.x *= 1.08; bearScarf.scale.z *= 0.87;

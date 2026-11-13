@@ -150,6 +150,8 @@ export const CHATS = [
                            ['N', "It's pancakes!", 'normal', 'happy'], ['B', 'Barry is very pleased.', 'happy', 'giggle']] },
   { when: (c) => c.month === 11 && c.date === 24, lines: [['N', 'Is Santa coming tonight?!', 'normal', 'wonder'], ['B', 'Barry left out cookies.', 'normal', 'curious'],
                            ['N', 'For Santa?', 'normal', 'curious'], ['B', 'For Barry. Later.', 'happy', 'giggle']] },
+  { when: (c) => c.costume === 'santa', lines: [['N', 'You make a great reindeer!', 'normal', 'giggle'], ['B', 'Barry is reindeer.', 'normal', 'happy'],
+                           ['B', 'Barry did not agree to this.', 'normal', 'giggle']] },
   { when: (c) => c.costume === 'santa', lines: [['B', 'Nom looks like Santa.', 'happy', 'happy'], ['N', 'Ho ho ho! Have you been good?', 'normal', 'giggle'],
                            ['B', 'Mostly.', 'normal', 'curious']] },
   { when: (c) => c.costume === 'santa', lines: [['N', 'Santa Nom is here! What do you wish for?', 'normal', 'giggle'], ['B', 'Barry wishes for nap.', 'normal', 'happy'],
