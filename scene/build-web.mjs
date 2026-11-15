@@ -17,4 +17,5 @@ for (const f of ['index.html', 'sw.js', 'shell.js', 'manifest.webmanifest'])
   writeFileSync(`${out}/${f}`, readFileSync('../web/' + f, 'utf8').replaceAll('%VERSION%', version));
 cpSync('../web/icons', out + '/icons', { recursive: true });
 writeFileSync(out + '/.nojekyll', '');
+writeFileSync(out + '/version.txt', version);   // (open copies of the app check this and reload when it changes)
 console.log(`site/ for ${version}:`, ['scene.js', 'chat.js', 'meshes.bin'].map(f => `${f} ${(readFileSync(`${out}/${f}`).length / 1e6).toFixed(1)} MB`).join(', '));

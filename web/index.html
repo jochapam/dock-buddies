@@ -118,5 +118,19 @@
     for (const src of ['scene.js?v=%VERSION%', 'chat.js?v=%VERSION%', 'shell.js?v=%VERSION%']) await new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.body.appendChild(s); });
   })();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  // A home-screen app can stay open in the background for days, so whenever it comes back to the front (and every few
+  // hours while it's open) it checks for a newer version and reloads into it, unless you're in the middle of typing.
+  let lastCheck = Date.now();
+  async function checkForUpdate() {
+    if (document.hidden || Date.now() - lastCheck < 60000) return;
+    lastCheck = Date.now();
+    try {
+      const v = (await (await fetch('version.txt', { cache: 'no-store' })).text()).trim();
+      const typing = document.activeElement === document.getElementById('talkIn') || document.getElementById('talkIn').value;
+      if (v && v !== '%VERSION%' && !typing) location.reload();
+    } catch { /* offline: try again next time */ }
+  }
+  document.addEventListener('visibilitychange', checkForUpdate);
+  setInterval(checkForUpdate, 3 * 3600 * 1000);
 </script>
 </body></html>
